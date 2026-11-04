@@ -52,6 +52,7 @@ supabase/
 ## Documentación de la Fase 0
 
 - [Informe de auditoría](docs/modelos/auditoria-fuentes.md)
+- [Conciliación XML–SQL Server](docs/modelos/conciliacion-xml-sqlserver.md)
 - [Arquitectura acordada](docs/arquitectura/arquitectura.md)
 - [Matriz de trazabilidad](docs/reglas-negocio/matriz-trazabilidad.md)
 - [Estrategia de pruebas](docs/pruebas/estrategia.md)

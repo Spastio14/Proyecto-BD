@@ -2,6 +2,10 @@
 
 Fecha de auditoría: 4 de noviembre de 2026.
 
+> Esta auditoría fue seguida por una comparación exhaustiva. La resolución y
+> los conteos corregidos están en
+> [`conciliacion-xml-sqlserver.md`](conciliacion-xml-sqlserver.md).
+
 ## 1. Archivos e historial encontrados
 
 El repositorio tiene dos commits en la rama remota `master`:
@@ -54,7 +58,8 @@ abiertas de esta auditoría.
   `FK_64_DET_PED_PROMO`, de `DETALLE_PEDIDO.id_promocion` a `PROMOCION`;
   `id_promocion` no aparece como atributo de `DETALLE_PEDIDO` en el modelo
   relacional visual.
-- El XML usa nombres completos y el SQL abrevia al menos 48 columnas. Ejemplos:
+- El XML usa nombres completos y el SQL abrevia 57 ocurrencias verificadas. La
+  cifra preliminar de 48 fue corregida mediante comparación campo por campo. Ejemplos:
   `telefono_contacto → tel`, `identificador_autenticacion → auth_uid`,
   `fecha_creacion → fec_crea`, `precio_unitario_aplicado → precio_unit` y
   `cantidad_reservada → cant_reservada`. Debe decidirse qué nombres son oficiales

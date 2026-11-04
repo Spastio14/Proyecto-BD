@@ -4,6 +4,10 @@
 
 Estado: completada en el árbol de trabajo, pendiente de revisión del propietario.
 
+La conciliación posterior está documentada en
+`docs/modelos/conciliacion-xml-sqlserver.md`. Sus decisiones semánticas bloquean
+la Fase 1 hasta recibir aprobación expresa.
+
 Criterios cubiertos:
 
 - historial y archivos inspeccionados;
