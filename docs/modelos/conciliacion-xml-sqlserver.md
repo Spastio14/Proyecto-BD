@@ -268,6 +268,27 @@ mostrarán en `America/Managua`. Los importes usarán `numeric`, nunca `float`.
 | Pérdidas | PERDIDA, DETALLE_PERDIDA, MOVIMIENTO_INVENTARIO | La FK única a movimiento evita doble descuento. No hay catálogo exacto para antes/durante/después ni tipos de incidente. |
 | Auditoría | REGISTRO_AUDITORIA | Solo relaciona empleado; las acciones de cliente o sistema no tienen actor relacional. Se recomienda reemplazar `id_empleado` por `id_persona_actor NULL` con FK a PERSONA; `NULL` más `origen_accion='SISTEMA'` representaría procesos automáticos. Requiere aprobación. |
 
+Condiciones operativas propuestas que necesitan confirmación:
+
+- un pedido de invitado se considera activo en `PENDIENTE_PAGO`,
+  `PAGADO_PARCIAL`, `PAGADO`, `EN_DISENO`, `EN_PRODUCCION` o `LISTO`;
+- la identidad del invitado se verifica mediante una cookie HttpOnly firmada por
+  el backend que contiene la referencia de la cuenta sombra, y el
+  `token_seguimiento` protege el acceso puntual a cada pedido;
+- un pedido `PENDIENTE_PAGO` vence a las 24 horas si no tiene transacción
+  verificada; una transacción reportada en `PENDIENTE` lo envía a revisión y
+  pausa la expiración automática;
+- el anticipo normal es el 50 % del total, redondeado a dos decimales con
+  `ROUND_HALF_UP`; cualquier excepción requiere una política explícita;
+- se permite como máximo una promoción por línea, combinable con mayorista solo
+  cuando `permite_combinacion_mayorista` sea verdadero;
+- producción requiere una decisión `APROBADO` para la versión actualmente
+  asociada a cada línea; una versión posterior exige otra aprobación;
+- `PERDIDA.tipo_incidente` describe la clase del incidente, pero no debe usarse
+  también para el momento. Se recomienda añadir
+  `PERDIDA.momento_ocurrencia` con `ANTES_PRODUCCION`, `DURANTE_PRODUCCION`,
+  `DESPUES_PRODUCCION` o `FUERA_PRODUCCION`.
+
 ## 10. Separación conceptual de la fuente SQL Server
 
 La fuente original permanecerá intacta. La futura conversión se dividirá así:
@@ -318,8 +339,11 @@ Tras aprobar las decisiones semánticas:
    sería `NULL` y `origen_accion` identificaría `SISTEMA`.
 6. Aprobar la nulabilidad propuesta: descuentos de cotización y pedido como
    `NOT NULL DEFAULT 0`, y `REEMBOLSO.motivo` como `NOT NULL`.
-7. Definir estados activos del invitado, política exacta de expiración,
-   excepciones/redondeo del anticipo y catálogos de pérdidas/transiciones.
+7. Aprobar o corregir las condiciones operativas anteriores: estados activos del
+   invitado, cookie firmada, pausa por pago reportado, redondeo del anticipo,
+   promoción única por línea y aprobación de la versión vigente.
+8. Aprobar o rechazar `PERDIDA.momento_ocurrencia` y sus cuatro valores; definir
+   además el catálogo de tipos de incidente y transiciones de pedido.
 
 Estos conflictos cambian significado, integridad o trazabilidad. La Fase 1 no
 debe comenzar hasta recibir esas decisiones.
