@@ -104,3 +104,12 @@ Las políticas de propiedad del cliente se incorporarán con Supabase Auth en la
 fase correspondiente. Hasta entonces, la ausencia de políticas mantiene esas
 tablas cerradas. No se usaron credenciales reales ni se probó un proyecto
 Supabase remoto en esta fase.
+
+### Ajuste de Fase 2
+
+La revisión del backend determinó que publicar `escala_precio` revela reglas
+mayoristas y permite que un navegador intente reproducirlas fuera del contexto
+del cliente. La migración `202611050001_restrict_wholesale_price_rls.sql` elimina
+su policy y revoca SELECT a `anon` y `authenticated`. El catálogo público conserva
+precio detalle. Los clientes registrados reciben el precio aplicable únicamente
+como resultado histórico de una cotización o pedido calculado por FastAPI.
