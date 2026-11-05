@@ -29,6 +29,24 @@ select pg_temp.assert_true(
 );
 
 select pg_temp.assert_true(
+    (select count(*) = 3
+     from information_schema.columns
+     where table_schema = 'public'
+       and table_name = 'transaccion'
+       and column_name in (
+           'ruta_comprobante', 'comprobante_mime', 'comprobante_tamano_bytes'
+       ))
+    and exists (
+        select 1
+        from pg_constraint
+        where conrelid = 'public.transaccion'::regclass
+          and conname = 'ck_transaccion_comprobante_integridad'
+          and contype = 'c'
+    ),
+    'transaccion debe conservar la referencia coherente del comprobante'
+);
+
+select pg_temp.assert_true(
     (select count(*) = 64
      from pg_constraint c
      join pg_namespace n on n.oid = c.connamespace

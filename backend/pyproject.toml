@@ -6,9 +6,11 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
   "fastapi>=0.115,<1",
   "httpx>=0.28,<1",
+  "PyJWT[crypto]>=2.10,<3",
   "psycopg[binary]>=3.2,<4",
   "pydantic>=2.10,<3",
   "pydantic-settings>=2.7,<3",
+  "python-multipart>=0.0.20,<1",
   "sqlalchemy>=2.0.36,<2.1",
   "uvicorn[standard]>=0.34,<1",
 ]
@@ -29,6 +31,7 @@ testpaths = ["tests"]
 markers = [
   "integration: usa PostgreSQL real",
   "concurrency: coordina varias conexiones PostgreSQL",
+  "remote: consulta explícita y no destructiva al proyecto Supabase de desarrollo",
 ]
 
 [tool.coverage.run]

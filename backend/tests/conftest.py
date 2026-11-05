@@ -20,7 +20,7 @@ class FixedAuthenticationProvider:
     def __init__(self, principal: Principal):
         self.principal = principal
 
-    def authenticate(self, request):
+    def authenticate(self, request, session):
         return self.principal
 
 

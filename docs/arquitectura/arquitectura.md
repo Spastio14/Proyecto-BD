@@ -60,9 +60,10 @@ La Fase 0 fija versiones mayores conservadoras y mantenidas:
 - SQLAlchemy 2.x y Psycopg 3.x.
 - Node.js 22 LTS, React 19 y TypeScript 5.x.
 
-La Fase 2 resolvió y fijó 38 paquetes en `backend/uv.lock`, incluidas versiones
+La Fase 3 resolvió y fijó 44 paquetes en `backend/uv.lock`, incluidas versiones
 compatibles de FastAPI, Pydantic 2, SQLAlchemy 2, Psycopg 3, Uvicorn, HTTPX y
-Pytest. Next.js, Tailwind y SDK de Supabase se fijarán en sus fases respectivas.
+Pytest, además de PyJWT/cryptography y multipart. Next.js y Tailwind se fijarán
+en sus fases respectivas.
 
 ## Decisiones para concurrencia
 
@@ -91,12 +92,13 @@ todo. Confirmar anticipo y crear todas sus reservas forma una sola unidad; si
 falta inventario, la verificación permanece pendiente para tratamiento
 administrativo del pago externo.
 
-## Autenticación y permisos en Fase 2
+## Autenticación y permisos
 
-`AuthenticationProvider` es una interfaz para Supabase Auth. Su implementación
-predeterminada no autentica a nadie, por lo que toda ruta protegida devuelve 401.
-Solo los fixtures instalan un proveedor controlado. Incluso entonces, los
-permisos se consultan en EMPLEADO, ASIGNACION_ROL, ROL, ROL_PERMISO y PERMISO.
+`AuthenticationProvider` verifica JWT de Supabase mediante el JWKS del proyecto
+y resuelve su `sub` contra CUENTA_ACCESO. Sin configuración completa no autentica
+a nadie y las rutas protegidas devuelven 401. Los invitados usan una cookie
+firmada distinta de Auth. En ambos casos, propiedad y permisos se consultan en
+CLIENTE, EMPLEADO, ASIGNACION_ROL, ROL, ROL_PERMISO y PERMISO.
 
 El catálogo HTTP omite escalas mayoristas. La migración
 `202611050001_restrict_wholesale_price_rls.sql` también revoca su SELECT directo

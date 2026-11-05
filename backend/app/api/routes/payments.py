@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, File, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
+from app.api.routes.designs import StorageRouteUnavailable
 from app.core.security import Principal, get_principal
 from app.db.session import get_session
 from app.schemas.api import PaymentRead, PaymentReport
@@ -37,3 +38,39 @@ def confirm_payment(
     session: Session = Depends(get_session),
 ):
     return PaymentService().confirm(session, payment_id=payment_id, principal=principal)
+
+
+@router.post("/{payment_id}/comprobante", status_code=status.HTTP_201_CREATED)
+async def upload_receipt(
+    payment_id: int,
+    request: Request,
+    file: UploadFile = File(),
+    principal: Principal = Depends(get_principal),
+) -> dict:
+    coordinator = getattr(request.app.state, "storage_coordinator", None)
+    if coordinator is None:
+        raise StorageRouteUnavailable("Supabase Storage no está configurado")
+    maximum = request.app.state.settings.storage_receipt_max_bytes
+    content = await file.read(maximum + 1)
+    coordinator.upload_receipt(
+        payment_id=payment_id,
+        file_name=file.filename or "archivo",
+        content_type=file.content_type or "application/octet-stream",
+        content=content,
+        principal=principal,
+    )
+    return {"id_transaccion": payment_id, "comprobante": "ALMACENADO"}
+
+
+@router.get("/{payment_id}/comprobante")
+def signed_receipt_url(
+    payment_id: int,
+    request: Request,
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> dict:
+    coordinator = getattr(request.app.state, "storage_coordinator", None)
+    if coordinator is None:
+        raise StorageRouteUnavailable("Supabase Storage no está configurado")
+    url = coordinator.receipt_url(session, payment_id=payment_id, principal=principal)
+    return {"signed_url": url, "expires_in": request.app.state.settings.storage_signed_url_ttl}
