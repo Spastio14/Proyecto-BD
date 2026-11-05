@@ -7,6 +7,8 @@ esquema PostgreSQL:
 2. `202611040002_relations_indexes.sql`: 64 FK, exclusión de escalas e índices.
 3. `202611040003_row_level_security.sql`: revocación por defecto, RLS en las 41
    tablas y lectura pública del catálogo activo.
+4. `202611050001_restrict_wholesale_price_rls.sql`: retira la lectura directa de
+   escalas mayoristas; su aplicación queda exclusivamente en FastAPI.
 
 No contienen datos. Supabase proporciona los roles `anon` y `authenticated`; el
 runner local los crea antes de aplicar las migraciones. La extensión

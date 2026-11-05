@@ -37,5 +37,20 @@ representan código ya implementado.
 | Entrega es distinta de producción | PEDIDO, ENVIO, AGENCIA_ENVIO, HISTORIAL_PEDIDO | `DeliveryService.complete` | Confirmar retiro o entrega real y cambiar estado | Terminar producción no marca entregado |
 | Auditoría de acciones críticas | REGISTRO_AUDITORIA y entidad afectada | `AuditService.record` | Insertar auditoría en la misma transacción del cambio | Rollback elimina cambio y auditoría parcial |
 
-La matriz se ampliará con el nombre real de endpoints, restricciones PostgreSQL y
-archivos de prueba cuando se implemente cada módulo.
+## Implementación de Fase 2
+
+| Área | Implementación | Evidencia PostgreSQL |
+|---|---|---|
+| Clientes y límites | `CustomerService`, `OrderService`; bloqueo de CLIENTE antes de contar | `test_orders_pricing.py` casos 01–08 |
+| Precios y promociones | `PricingService`; valores leídos de variante, escala y promoción | casos 09–16 |
+| Pagos y reservas | `PaymentService`, `InventoryReservationService`; una transacción | `test_payments_inventory.py` casos 17–30 |
+| Diseños y producción | `DesignService`, `ProductionService`; última versión exacta | `test_production_loss_security.py` casos 31–32 y caso 48 |
+| Pérdidas | `LossService`; movimiento UQ y costo histórico | casos 33–35 |
+| Propiedad y seguridad | proveedor cerrado, propiedad por persona y permisos desde roles | casos 36–40 |
+| Cotizaciones | `QuotationService`; conversión bloqueada y UQ | casos 41–43 |
+| Expiración | `OrderExpirationService`; `SKIP LOCKED` e historial idempotente | casos 44–45 |
+| API/OpenAPI | routers por módulo, salud y catálogo sin escalas mayoristas | casos 46–47 |
+| Pago tardío y no regresión | permiso administrativo separado; pagos posteriores no bajan EN_PRODUCCION | casos 49–50 |
+
+La integración futura de Supabase Auth sustituirá el proveedor cerrado sin
+cambiar los servicios ni aceptar identificadores de propietario del navegador.

@@ -60,10 +60,9 @@ La Fase 0 fija versiones mayores conservadoras y mantenidas:
 - SQLAlchemy 2.x y Psycopg 3.x.
 - Node.js 22 LTS, React 19 y TypeScript 5.x.
 
-FastAPI, Pydantic, Pytest, Next.js, Tailwind y los SDK se fijarán a versiones
-exactas compatibles en sus lockfiles cuando se creen los proyectos. Ese paso
-incluye una instalación y pruebas reales; no se inventan pins sin resolver el
-árbol de dependencias.
+La Fase 2 resolvió y fijó 38 paquetes en `backend/uv.lock`, incluidas versiones
+compatibles de FastAPI, Pydantic 2, SQLAlchemy 2, Psycopg 3, Uvicorn, HTTPX y
+Pytest. Next.js, Tailwind y SDK de Supabase se fijarán en sus fases respectivas.
 
 ## Decisiones para concurrencia
 
@@ -78,6 +77,37 @@ incluye una instalación y pruebas reales; no se inventan pins sin resolver el
 - La liberación y el consumo de reservas comprobarán su estado para impedir una
   segunda aplicación.
 
-La estrategia exacta (`FOR UPDATE`, restricciones parciales, aislamiento o
-bloqueo asesor) se decidirá durante la Fase 1 con pruebas concurrentes en
-PostgreSQL real.
+La Fase 2 usa `SELECT FOR UPDATE` sobre el cliente antes de contar pedidos y
+sobre artículos en orden ascendente antes de calcular disponibilidad. Pagos,
+reservas, movimientos y pérdidas bloquean su registro raíz. Expiración usa
+`FOR UPDATE SKIP LOCKED`. Dos pruebas con conexiones reales validan el límite de
+pedido invitado y la última existencia disponible.
+
+## Unidad de trabajo
+
+Los servicios reciben una `Session` y nunca ejecutan `commit`. La dependencia
+HTTP, el comando o la prueba que abre la operación confirma una vez o revierte
+todo. Confirmar anticipo y crear todas sus reservas forma una sola unidad; si
+falta inventario, la verificación permanece pendiente para tratamiento
+administrativo del pago externo.
+
+## Autenticación y permisos en Fase 2
+
+`AuthenticationProvider` es una interfaz para Supabase Auth. Su implementación
+predeterminada no autentica a nadie, por lo que toda ruta protegida devuelve 401.
+Solo los fixtures instalan un proveedor controlado. Incluso entonces, los
+permisos se consultan en EMPLEADO, ASIGNACION_ROL, ROL, ROL_PERMISO y PERMISO.
+
+El catálogo HTTP omite escalas mayoristas. La migración
+`202611050001_restrict_wholesale_price_rls.sql` también revoca su SELECT directo
+a `anon` y `authenticated`; FastAPI las usa después de verificar el tipo real del
+cliente.
+
+## Estado financiero append-only
+
+Una transacción reportada conserva siempre importe, tipo, pedido, hito, fecha y
+clave idempotente. La resolución cambia únicamente `estado_verificacion` de
+PENDIENTE a VERIFICADO o RECHAZADO y guarda empleado y evento de auditoría en la
+misma transacción. No se elimina ni reemplaza el registro económico. Las
+correcciones monetarias futuras deberán usar compensaciones enlazadas, sin
+reescribir el importe original.

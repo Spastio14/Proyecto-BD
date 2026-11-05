@@ -53,8 +53,10 @@ select pg_temp.assert_true(
 select pg_temp.assert_true(
     not has_table_privilege('anon', 'public.persona', 'SELECT')
     and not has_table_privilege('authenticated', 'public.pedido', 'SELECT')
+    and not has_table_privilege('anon', 'public.escala_precio', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.escala_precio', 'SELECT')
     and not has_table_privilege('anon', 'public.categoria', 'INSERT'),
-    'las tablas privadas y las escrituras deben permanecer denegadas'
+    'las tablas privadas, escalas mayoristas y escrituras deben permanecer denegadas'
 );
 
 with expected(table_name, column_name) as (

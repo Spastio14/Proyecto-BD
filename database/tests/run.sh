@@ -33,7 +33,21 @@ apply_file() {
 }
 
 for database in s2r_rebuild_1 s2r_rebuild_2; do
-    docker exec "$container_name" createdb --username postgres "$database"
+    database_created=false
+    for _ in $(seq 1 60); do
+        if docker exec "$container_name" createdb --username postgres "$database" \
+            >/dev/null 2>&1; then
+            database_created=true
+            break
+        fi
+        sleep 1
+    done
+    if [ "$database_created" != true ]; then
+        echo "FALLO: PostgreSQL no permitió crear $database" >&2
+        exit 1
+    fi
+    docker exec "$container_name" psql --username postgres --dbname "$database" \
+        --tuples-only --no-align --command "select 1" | grep --quiet '^1$'
     apply_file "$database" "$repo_dir/database/tests/bootstrap_supabase.sql"
     for migration in "$repo_dir"/supabase/migrations/[0-9]*.sql; do
         apply_file "$database" "$migration"
@@ -49,10 +63,17 @@ catalog_rows="$(docker exec "$container_name" psql --username postgres \
       (select count(*) from public.categoria),
       (select count(*) from public.producto),
       (select count(*) from public.variante_producto),
-      (select count(*) from public.escala_precio),
       (select count(*) from public.promocion),
       (select count(*) from public.promocion_variante));")"
-test "$catalog_rows" = "1|1|1|2|1|1"
+test "$catalog_rows" = "1|1|1|1|1"
+
+if docker exec "$container_name" psql --username postgres \
+    --dbname s2r_rebuild_1 --set ON_ERROR_STOP=1 \
+    --command "set role anon; select count(*) from public.escala_precio;" \
+    >/dev/null 2>&1; then
+    echo "FALLO: anon pudo leer escalas mayoristas" >&2
+    exit 1
+fi
 
 if docker exec "$container_name" psql --username postgres \
     --dbname s2r_rebuild_1 --set ON_ERROR_STOP=1 \

@@ -1,8 +1,7 @@
-# Backend
+# Backend FastAPI
 
-Directorio reservado para FastAPI durante la Fase 2. La estructura prevista es
-`app/api`, `app/core`, `app/models`, `app/schemas`, `app/repositories`,
-`app/services`, `app/db` y `tests`.
+La aplicación usa Python 3.12, FastAPI, SQLAlchemy 2 y Psycopg 3 contra el
+esquema canónico de `supabase/migrations`. No crea tablas ni ejecuta DDL.
 
-No se creó aún un manifiesto Python porque la Fase 0 no autoriza implementar el
-backend ni fijar dependencias sin instalarlas y validarlas.
+Consulta `docs/arquitectura/backend-fase-2.md` para instalación, variables,
+PostgreSQL, ejecución, Swagger y pruebas.

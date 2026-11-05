@@ -44,6 +44,12 @@ Estas instrucciones aplican a todo el repositorio.
   importes enviados por el frontend.
 - Conservar pagos, reembolsos y compensaciones como historial append-only.
 - No integrar pagos reales ni desplegar servicios sin autorización específica.
+- Los servicios no hacen `commit`; el endpoint, job o prueba que abre la unidad
+  de trabajo es el único responsable de commit y rollback.
+- Hasta integrar Supabase Auth, las rutas protegidas permanecen cerradas. No
+  añadir encabezados, parámetros ni endpoints de suplantación para desarrollo.
+- Resolver permisos de empleado desde EMPLEADO, ASIGNACION_ROL, ROL_PERMISO y
+  PERMISO; nunca aceptar roles o permisos declarados por el cliente.
 
 ## Seguridad
 

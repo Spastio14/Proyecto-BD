@@ -62,12 +62,17 @@ final del propietario. No se desplegó ni se aplicó a Supabase remoto.
 
 ## Fase 2 — Backend y transacciones
 
-Crear el proyecto FastAPI, configuración tipada, SQLAlchemy/Psycopg, servicios y
-repositorios. Priorizar identidad, clientes, pedidos, pagos e inventario. Cada
-regla concurrente debe probarse con conexiones PostgreSQL reales.
+Estado: implementada y validada en la rama `feat/fase-2-backend`; pendiente de
+revisión y merge del propietario. No se desplegó.
 
-Criterio de salida: API inicia, OpenAPI es coherente, reglas críticas y rollback
-están probados, y no existe lógica económica duplicada en frontend o SQL.
+Se implementaron configuración tipada, FastAPI, SQLAlchemy/Psycopg, identidad
+preparada para Supabase, cotizaciones, precios, pedidos, pagos, inventario,
+diseños, producción, pérdidas, auditoría y expiración. Los servicios usan una
+unidad de trabajo externa y bloqueos PostgreSQL reales.
+
+Criterio de salida cumplido: Uvicorn inicia, OpenAPI expone los endpoints
+documentados, las reglas críticas y rollback pasan en PostgreSQL 17 y no existe
+lógica económica en frontend o triggers.
 
 ## Fase 3 — Supabase
 
