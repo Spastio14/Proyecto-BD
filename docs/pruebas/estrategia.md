@@ -55,6 +55,10 @@ La estructura, las migraciones, el seed y la RLS mínima ya se prueban en
 PostgreSQL 17 real mediante `database/tests/run.sh`. La evidencia está en
 `docs/pruebas/fase-1-resultados.md`.
 
-Las pruebas de servicios, concurrencia, Auth, Storage y propiedad por cliente
-siguen pendientes porque requieren el backend y la integración Supabase de fases
-posteriores. No se presentan como ejecutadas.
+## Estado en Fase 3
+
+Servicios, concurrencia, Auth criptográfico, vínculo de cuenta, credencial de
+invitado, coordinación de Storage y propiedad se validan contra PostgreSQL 17
+real. Las comprobaciones del proyecto Supabase alojado están separadas con el
+marcador `remote` y permanecen omitidas hasta contar con credenciales y
+conectividad explícitas. No se presentan como ejecutadas.

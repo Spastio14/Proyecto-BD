@@ -52,5 +52,15 @@ representan código ya implementado.
 | API/OpenAPI | routers por módulo, salud y catálogo sin escalas mayoristas | casos 46–47 |
 | Pago tardío y no regresión | permiso administrativo separado; pagos posteriores no bajan EN_PRODUCCION | casos 49–50 |
 
-La integración futura de Supabase Auth sustituirá el proveedor cerrado sin
-cambiar los servicios ni aceptar identificadores de propietario del navegador.
+## Implementación de Fase 3
+
+| Área | Implementación | Evidencia |
+|---|---|---|
+| JWT y cuenta | JWKS, issuer/audience/exp y vínculo CUENTA_ACCESO activo | casos 51–57 |
+| Invitado | cookie cifrada/autenticada Secure/HttpOnly y perfil INVITADO activo | casos 58–59 |
+| Registro | Auth externo, transacción local y eliminación compensatoria | casos 60–61 |
+| PostgreSQL alojado | TLS obligatorio y compatibilidad con transaction pooler | casos 62–63 |
+| Diseños | bucket privado, VERSION_DISENO y compensación | casos 64–66, 69 |
+| Comprobantes | bucket privado y referencia coherente en TRANSACCION | casos 67–68 |
+| RLS | datos privados cerrados a Data API | caso 70 y runner estructural |
+| Proyecto alojado | versión, esquema e historial de migraciones | casos 76–77 pendientes de opt-in remoto |

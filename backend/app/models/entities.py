@@ -2,7 +2,17 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, Uuid
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    Uuid,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -274,6 +284,9 @@ class Transaccion(Base):
     referencia_bancaria: Mapped[str | None] = mapped_column(String(120))
     estado_verificacion: Mapped[str] = mapped_column(String(80))
     clave_idem: Mapped[UUID] = mapped_column(Uuid)
+    ruta_comprobante: Mapped[str | None] = mapped_column(String(1000))
+    comprobante_mime: Mapped[str | None] = mapped_column(String(100))
+    comprobante_tamano_bytes: Mapped[int | None] = mapped_column(BigInteger)
 
 
 class ReservaInventario(Base):

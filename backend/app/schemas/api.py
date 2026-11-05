@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 
 class ORMModel(BaseModel):
@@ -12,6 +12,24 @@ class ORMModel(BaseModel):
 
 class StrictInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class RegistrationRequest(StrictInput):
+    names: str = Field(min_length=1, max_length=120)
+    surnames: str | None = Field(default=None, max_length=120)
+    email: str = Field(min_length=3, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    phone: str | None = Field(default=None, max_length=30)
+    password: SecretStr = Field(min_length=8, max_length=128)
+
+
+class LoginRequest(StrictInput):
+    email: str = Field(min_length=3, max_length=254)
+    password: SecretStr = Field(min_length=1, max_length=128)
+
+
+class GuestCreate(StrictInput):
+    names: str = Field(min_length=1, max_length=120)
+    phone: str | None = Field(default=None, max_length=30)
 
 
 class OrderLineCreate(StrictInput):

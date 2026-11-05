@@ -76,9 +76,14 @@ lógica económica en frontend o triggers.
 
 ## Fase 3 — Supabase
 
-Vincular Auth con `PERSONA`/`CUENTA_ACCESO`, configurar RLS y Storage privado y
-probar accesos permitidos y denegados. Las credenciales se introducirán por un
-medio seguro.
+Estado: implementación local y pruebas completadas; preflight y aplicación
+remotos pendientes de credenciales seguras, conectividad y autorización.
+
+Se implementaron vínculo Auth con `PERSONA`/`CUENTA_ACCESO`, validación JWT por
+JWKS, invitados con cookie firmada, conexión compatible con poolers, RLS de
+privilegio mínimo, Storage privado, URLs firmadas y compensaciones ante fallos
+entre servicios. La referencia mínima de comprobante se añadió a `TRANSACCION`
+sin crear una tabla adicional. Véase `docs/arquitectura/supabase-fase-3.md`.
 
 ## Fases 4 a 7
 

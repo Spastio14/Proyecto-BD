@@ -8,11 +8,20 @@ from app.core.config import Settings
 
 
 def build_engine(settings: Settings) -> Engine:
+    connect_args: dict[str, object] = {
+        "connect_timeout": settings.db_connect_timeout,
+        "sslmode": settings.database_sslmode,
+    }
+    if settings.database_connection_mode == "transaction_pooler":
+        # PgBouncer en modo transaction no conserva prepared statements entre clientes.
+        connect_args["prepare_threshold"] = None
     return create_engine(
         settings.database_url,
         pool_pre_ping=True,
         pool_size=settings.db_pool_size,
         max_overflow=settings.db_max_overflow,
+        pool_recycle=settings.db_pool_recycle,
+        connect_args=connect_args,
     )
 
 
