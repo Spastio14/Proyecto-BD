@@ -38,10 +38,12 @@ export SUPABASE_PROJECT_REF=iwvmbdfkxrssduoqobgy
 ./scripts/supabase/preflight.sh
 ```
 
-El script comprueba el ref, muestra `migration list --linked` y ejecuta
-`db push --linked --dry-run`. No contiene `db push` sin `--dry-run`. El enlace
-debe usar una contraseña nueva almacenada fuera del repositorio; no se debe
-recuperar ni reutilizar ninguna contraseña expuesta anteriormente.
+El script requiere Supabase CLI 3.x, comprueba nombre, ref y estado, ejecuta
+consultas SQL dentro de una transacción `--read-only`, muestra
+`migration list --remote` y ejecuta `db push --remote --dry-run --skip-vault`.
+No contiene `db push` real. El enlace debe usar una contraseña nueva almacenada
+fuera del repositorio; no se debe recuperar ni reutilizar ninguna contraseña
+expuesta anteriormente.
 
 El estado inicial remoto de cero tablas y cero migraciones procede de las
 instrucciones del propietario y sigue pendiente de verificación directa. Si el
@@ -128,6 +130,14 @@ por 300 segundos. Este diseño evita duplicar en Storage toda la lógica de role
 pedidos y versiones. Una futura exposición directa al navegador requerirá nuevas
 políticas específicas y sus pruebas antes de conceder grants.
 
+La revisión inicial de Fase 3 contenía `REVOKE ALL` sobre `storage.buckets` y
+`storage.objects`. Esos grants son de tabla y afectarían globalmente todos los
+buckets administrados por Supabase; PostgreSQL no permite acotarlos por ID de
+bucket. La instrucción se retiró antes de cualquier aplicación remota. La
+migración sólo inserta o actualiza los IDs `disenos` y `comprobantes`, y conserva
+los privilegios administrados. El preflight muestra grants y policies existentes;
+si aparece una policy amplia que alcance esos IDs, el proceso se detiene.
+
 ## Matriz RLS y privilegios
 
 | Recurso | `anon` | `authenticated` por Data API | FastAPI |
@@ -160,7 +170,29 @@ claves ni URL PostgreSQL.
 
 ## Guía de puesta en marcha para desarrollo
 
-1. Instalar Supabase CLI y comprobar `supabase --version`. Desde la raíz,
+Desde Git Bash, usando el checkout actualizado de esta rama:
+
+```bash
+cd /c/ruta/a/Proyecto-BD
+git switch feat/fase-3-supabase
+git pull --ff-only origin feat/fase-3-supabase
+
+npx --yes supabase@3.0.0 login
+npx --yes supabase@3.0.0 link --project-ref iwvmbdfkxrssduoqobgy
+
+export SUPABASE_PROJECT_REF=iwvmbdfkxrssduoqobgy
+set -o pipefail
+./scripts/supabase/preflight.sh 2>&1 | tee fase-3-preflight.txt
+```
+
+`login` y `link` reciben las credenciales de forma interactiva. No se pasan con
+flags, no se guardan en el repositorio y no deben aparecer en
+`fase-3-preflight.txt`. El archivo compartible contiene sólo identidad/estado del
+proyecto, versión PostgreSQL, extensiones, grants/policies, historial, dry-run y
+metadatos JWKS (`kid`, `kty`, `alg`, `use`). Si el script termina con `FALLO`, se
+comparte esa salida y no se ejecuta ningún otro comando.
+
+1. Instalar Supabase CLI 3.x o disponer de Node.js/npx. Desde la raíz,
    `supabase status` debe reconocer `supabase/config.toml`; el stack local sólo
    existe después de iniciarlo de forma deliberada.
 2. Iniciar sesión con `supabase login` usando un token introducido en la consola,
@@ -171,7 +203,7 @@ claves ni URL PostgreSQL.
 4. Ejecutar `./scripts/supabase/preflight.sh`, guardar su salida sin secretos y
    revisar el historial y el dry-run. Detenerse si aparece un objeto inesperado.
 5. Solicitar autorización expresa para aplicar. Sólo tras recibirla se ejecuta
-   `supabase db push --linked`; no se ejecuta el seed.
+   `supabase db push --remote --skip-vault`; no se ejecuta el seed.
 6. En el panel Auth, habilitar correo/contraseña y confirmación por correo. La URL
    de sitio y redirecciones deben apuntar al frontend autorizado cuando exista.
 7. Copiar la publishable key y secret key al gestor de secretos del backend. La

@@ -79,14 +79,14 @@ como éxito.
 
 ## Pendiente remoto
 
-No pudo ejecutarse `scripts/supabase/preflight.sh` porque faltan un CLI instalado
-en `PATH`, un enlace autenticado y conectividad permitida a los dominios
-Supabase. Antes de
-cualquier `db push` se necesita una contraseña nueva o credencial equivalente,
-inyectada de forma segura, y acceso de red aprobado. Entonces se ejecutarán, en
-este orden, `migration list --linked`, `db push --linked --dry-run` y las dos
-pruebas remotas de sólo lectura. Sólo después de revisar esos resultados se puede
-solicitar autorización para aplicar las migraciones.
+No pudo ejecutarse `scripts/supabase/preflight.sh` porque este entorno no tiene
+un enlace autenticado, secretos ni conectividad permitida a los dominios
+Supabase. El script admite CLI instalado o `npx`, verifica el proyecto mediante
+la API, consulta PostgreSQL con `--read-only`, ejecuta
+`migration list --remote`, ejecuta `db push --remote --dry-run --skip-vault` y
+comprueba los metadatos públicos JWKS sin imprimir material de clave. Sólo después
+de revisar esos resultados se puede solicitar autorización para aplicar las
+migraciones.
 
 El warning de Starlette sobre una futura transición de `TestClient` a `httpx2`
 proviene de una dependencia y no afectó la ejecución.
