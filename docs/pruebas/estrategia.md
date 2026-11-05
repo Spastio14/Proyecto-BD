@@ -49,9 +49,12 @@ Cada fase registrará comando, versión del motor, número de pruebas, resultado
 fallos esperados, omitidos y fecha. Un comando no ejecutado no se marcará como
 exitoso.
 
-## Estado en Fase 0
+## Estado en Fase 1
 
-No existe aún DDL PostgreSQL ni código ejecutable. En esta fase solo se realizaron
-comprobaciones estáticas de inventario y consistencia de las fuentes. Las pruebas
-de integración quedan bloqueadas hasta que se aprueben las discrepancias y se
-cree la primera migración.
+La estructura, las migraciones, el seed y la RLS mínima ya se prueban en
+PostgreSQL 17 real mediante `database/tests/run.sh`. La evidencia está en
+`docs/pruebas/fase-1-resultados.md`.
+
+Las pruebas de servicios, concurrencia, Auth, Storage y propiedad por cliente
+siguen pendientes porque requieren el backend y la integración Supabase de fases
+posteriores. No se presentan como ejecutadas.
