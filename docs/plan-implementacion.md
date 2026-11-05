@@ -2,7 +2,7 @@
 
 ## Fase 0 — Auditoría y preparación
 
-Estado: completada en el árbol de trabajo, pendiente de revisión del propietario.
+Estado: completada, revisada y conciliada por el propietario.
 
 La conciliación posterior está documentada en
 `docs/modelos/conciliacion-xml-sqlserver.md`. Sus decisiones semánticas bloquean
@@ -20,7 +20,8 @@ Criterios cubiertos:
 
 ## Fase 1 — PostgreSQL
 
-No comenzar sin autorización expresa y resolución de las decisiones bloqueantes.
+Estado: implementada y validada en la rama de desarrollo; pendiente de revisión
+final del propietario. No se desplegó ni se aplicó a Supabase remoto.
 
 ### Secuencia
 
@@ -38,7 +39,8 @@ No comenzar sin autorización expresa y resolución de las decisiones bloqueante
    - `VARCHAR(MAX)` → `text`;
    - corchetes y `dbo` → convención PostgreSQL aprobada;
    - `TOP` → `LIMIT`; concatenación `+` → `concat` o `||`.
-6. Implementar restricciones estructurales y revisar las cinco cascadas.
+6. Implementar restricciones estructurales y revisar las seis FK con cascada
+   que forman parte de cuatro composiciones o tablas puente.
 7. Añadir índices de FK y de los patrones críticos; justificar cada índice.
 8. Preparar seeds separados e idempotentes, sin fechas o identidades que
    comprometan producción.

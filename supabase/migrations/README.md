@@ -1,9 +1,17 @@
 # Migraciones canónicas
 
-Este directorio será la única fuente canónica del esquema PostgreSQL. Está vacío
-durante la Fase 0 porque las discrepancias entre el XML y el T-SQL aún requieren
-decisión del propietario.
+Los archivos numerados se aplican en orden y son la única fuente canónica del
+esquema PostgreSQL:
 
-No copiar aquí el script SQL Server sin convertirlo y validarlo. Cada migración
-futura debe ser versionada, reproducible, compatible con Supabase y probada desde
-una base vacía.
+1. `202611040001_core_schema.sql`: 41 tablas, PK, UQ, NOT NULL y CHECK.
+2. `202611040002_relations_indexes.sql`: 64 FK, exclusión de escalas e índices.
+3. `202611040003_row_level_security.sql`: revocación por defecto, RLS en las 41
+   tablas y lectura pública del catálogo activo.
+
+No contienen datos. Supabase proporciona los roles `anon` y `authenticated`; el
+runner local los crea antes de aplicar las migraciones. La extensión
+`btree_gist`, disponible en Supabase, impide rangos mayoristas activos
+solapados.
+
+La forma verificada de aplicar todo desde cero es `./database/tests/run.sh` desde
+la raíz. No se debe ejecutar el seed como parte de una migración de producción.

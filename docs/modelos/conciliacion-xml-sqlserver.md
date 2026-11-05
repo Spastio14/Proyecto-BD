@@ -6,6 +6,12 @@ Alcance: comparación estática entre `docs/S2R_BD.drawio.xml` y
 `docs/copia - Sublimacion2R.sql`. Las fuentes originales no fueron modificadas y
 no se creó DDL PostgreSQL.
 
+> **Estado posterior:** las decisiones que este documento marcaba como
+> pendientes fueron aprobadas por el propietario y aplicadas en la Fase 1. El
+> resultado ejecutable y las diferencias finales están en
+> [`diferencias-postgresql.md`](diferencias-postgresql.md). Esta conciliación se
+> conserva como evidencia del análisis previo.
+
 ## 1. Procedencia y autoridad
 
 El historial disponible contiene un único commit que incorpora ambas fuentes:
