@@ -68,6 +68,10 @@ export DATABASE_URL="postgresql+psycopg://postgres:${test_password}@127.0.0.1:${
 export APP_ENV="test"
 export UV_CACHE_DIR="${UV_CACHE_DIR:-/tmp/uv-cache}"
 
+python -m unittest discover \
+    -s "$repo_dir/scripts/supabase/tests" -p 'test_*.py'
+echo "OK: parser de projects list validado con formatos compatibles e inválidos."
+
 cd "$backend_dir"
 uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 18000 \
     >/tmp/s2r-fase2-uvicorn.log 2>&1 &

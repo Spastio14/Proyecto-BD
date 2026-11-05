@@ -45,6 +45,13 @@ No contiene `db push` real. El enlace debe usar una contraseña nueva almacenada
 fuera del repositorio; no se debe recuperar ni reutilizar ninguna contraseña
 expuesta anteriormente.
 
+En Supabase CLI 3.0.0, `projects list --output-format json` produce un objeto
+`{"projects": [...], "message": ""}`; la opción heredada `--output json`
+produce directamente la lista. El parser acepta ambas formas y el sobre
+estructurado `data.projects`, valida la raíz, la lista, cada objeto y los tipos de
+`id`, `ref`, `name` y `status` antes de acceder a ellos. Cualquier otra forma
+termina con un error descriptivo sin imprimir el JSON recibido.
+
 El estado inicial remoto de cero tablas y cero migraciones procede de las
 instrucciones del propietario y sigue pendiente de verificación directa. Si el
 historial remoto no está vacío o el dry-run propone borrar o reescribir objetos,
@@ -221,6 +228,12 @@ comparte esa salida y no se ejecuta ningún otro comando.
 11. Ejecutar `./database/tests/run.sh` y `./backend/tests/run.sh`. Las pruebas
     remotas sólo se habilitan en el proyecto de desarrollo aislado con
     `RUN_SUPABASE_REMOTE_TESTS=1` y una URL inyectada como secreto.
+
+Las pruebas del parser también pueden ejecutarse solas:
+
+```bash
+python -m unittest discover -s scripts/supabase/tests -p 'test_*.py' -v
+```
 
 No se crea el primer empleado desde un endpoint público. Se registra primero una
 cuenta Auth ficticia y un administrador autorizado vincula su UUID a una

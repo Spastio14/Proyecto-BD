@@ -40,19 +40,9 @@ if [ "$linked_ref" != "$expected_ref" ]; then
 fi
 
 projects_json="$("${supabase_cli[@]}" projects list --output-format json)"
-PROJECTS_JSON="$projects_json" EXPECTED_REF="$expected_ref" EXPECTED_NAME="$expected_name" \
-python -c 'import json, os, sys
-projects = json.loads(os.environ["PROJECTS_JSON"])
-expected_ref = os.environ["EXPECTED_REF"]
-expected_name = os.environ["EXPECTED_NAME"]
-matches = [p for p in projects if p.get("id") == expected_ref or p.get("ref") == expected_ref]
-if len(matches) != 1 or matches[0].get("name") != expected_name:
-    sys.exit("FALLO: el ref no corresponde exactamente a SublimacionDobleR-prueba")
-project = matches[0]
-status = project.get("status", "DESCONOCIDO")
-if status != "ACTIVE_HEALTHY":
-    sys.exit(f"FALLO: el proyecto no está ACTIVE_HEALTHY; estado={status}")
-print(f"Proyecto verificado: {expected_name} ({expected_ref}); estado={status}")'
+printf '%s' "$projects_json" | python scripts/supabase/project_list_parser.py \
+    --expected-ref "$expected_ref" \
+    --expected-name "$expected_name"
 unset projects_json
 
 mapfile -t local_migrations < <(
@@ -99,9 +89,21 @@ echo "Metadatos públicos de las claves JWT (sin imprimir material de clave):"
 jwks_json="$(curl --fail --silent --show-error \
     "https://${expected_ref}.supabase.co/auth/v1/.well-known/jwks.json")"
 JWKS_JSON="$jwks_json" python -c 'import json, os, sys
-keys = json.loads(os.environ["JWKS_JSON"]).get("keys", [])
+payload = json.loads(os.environ["JWKS_JSON"])
+if not isinstance(payload, dict):
+    sys.exit("FALLO: la raíz JWKS debe ser un objeto JSON")
+keys = payload.get("keys")
+if not isinstance(keys, list):
+    sys.exit("FALLO: el campo JWKS keys debe ser una lista")
 if not keys:
     sys.exit("FALLO: el proyecto no publicó claves JWKS; revisar si aún usa HS256 legado")
+for index, key in enumerate(keys):
+    if not isinstance(key, dict):
+        sys.exit(f"FALLO: la clave JWKS en índice {index} debe ser un objeto")
+    for field in ("kid", "kty", "alg", "use"):
+        value = key.get(field)
+        if value is not None and not isinstance(value, str):
+            sys.exit(f"FALLO: el campo JWKS {field} en índice {index} debe ser texto")
 metadata = [{k: key.get(k) for k in ("kid", "kty", "alg", "use")} for key in keys]
 unsupported = [key for key in metadata if key.get("alg") not in {"ES256", "RS256"}]
 print(json.dumps(metadata, ensure_ascii=False, indent=2))
