@@ -13,3 +13,9 @@ unidades y proveedor aislados para la demostración integral. La compra de 30,
 el pedido de 5 y las operaciones posteriores se realizan mediante la API para
 mostrar las transacciones reales. Este segundo seed tampoco se carga de forma
 automática ni debe ejecutarse en Supabase remoto.
+
+`003_roles_permisos_fase_4_2.sql` instala de forma idempotente los perfiles
+ADMINISTRADOR, CONTADOR, VENDEDOR y PRODUCCION, junto con permisos separados
+para consulta, gestión y autorización. Es DML versionado sobre las tablas
+existentes: no agrega una sexta migración ni se aplica remotamente sin la
+autorización explícita del propietario.

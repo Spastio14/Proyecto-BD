@@ -166,7 +166,7 @@ class InventoryService:
     def list_with_availability(
         cls, session: Session, principal: Principal
     ) -> list[dict[str, object]]:
-        AuthorizationService.require(session, principal, "INVENTARIO_GESTIONAR")
+        AuthorizationService.require(session, principal, "INVENTARIO_CONSULTAR")
         articles = list(
             session.scalars(
                 select(ArticuloInventariable).order_by(ArticuloInventariable.nombre)

@@ -8,6 +8,14 @@ from app.services.customers import CustomerService
 router = APIRouter(prefix="/clientes", tags=["clientes"])
 
 
+@router.get("")
+def list_customers(
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> list[dict[str, object]]:
+    return CustomerService.list_for_employee(session, principal)
+
+
 @router.get("/me")
 def me(
     principal: Principal = Depends(get_principal), session: Session = Depends(get_session)

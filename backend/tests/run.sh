@@ -60,7 +60,7 @@ for migration in "$repo_dir"/supabase/migrations/[0-9]*.sql; do
     apply_file "$template_database" "$migration"
 done
 apply_file "$template_database" "$repo_dir/database/seeds/001_demo.sql"
-apply_file "$template_database" "$backend_dir/tests/fixtures_permissions.sql"
+apply_file "$template_database" "$repo_dir/database/seeds/003_roles_permisos_fase_4_2.sql"
 
 export TEST_ADMIN_DATABASE_URL="postgresql+psycopg://postgres:${test_password}@127.0.0.1:${postgres_port}/postgres"
 export TEST_TEMPLATE_DATABASE="$template_database"

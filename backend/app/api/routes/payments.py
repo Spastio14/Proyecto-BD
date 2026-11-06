@@ -55,6 +55,14 @@ def reject_payment(
     )
 
 
+@router.get("", response_model=list[PaymentRead])
+def list_payments(
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+):
+    return PaymentService.list_all(session, principal)
+
+
 @router.get("/pedidos/{order_id}", response_model=list[PaymentRead])
 def list_order_payments(
     order_id: int,

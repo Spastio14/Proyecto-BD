@@ -33,6 +33,20 @@ class RegistrationRecoveryRequest(StrictInput):
     phone: str | None = Field(default=None, max_length=30)
 
 
+class EmployeeInviteRequest(StrictInput):
+    names: str = Field(min_length=1, max_length=120)
+    surnames: str | None = Field(default=None, max_length=120)
+    email: str = Field(min_length=3, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    phone: str | None = Field(default=None, max_length=30)
+    document: str | None = Field(default=None, max_length=120)
+    role_id: int = Field(gt=0)
+    capacity: int = Field(default=10, ge=0, le=1000)
+
+
+class EmployeeRoleAssignment(StrictInput):
+    role_id: int = Field(gt=0)
+
+
 class GuestCreate(StrictInput):
     names: str = Field(min_length=1, max_length=120)
     phone: str | None = Field(default=None, max_length=30)

@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from typing import Protocol
 from urllib.parse import quote
@@ -5,7 +6,9 @@ from uuid import UUID
 
 import httpx
 
-from app.core.exceptions import Conflict, DomainError
+from app.core.exceptions import AuthenticationRequired, Conflict, DomainError
+
+logger = logging.getLogger(__name__)
 
 
 class ExternalServiceUnavailable(DomainError):
@@ -17,10 +20,45 @@ class AuthIdentityAlreadyExists(Conflict):
     code = "auth_identity_already_exists"
 
 
+class AuthPasswordRejected(DomainError):
+    status_code = 422
+    code = "auth_password_rejected"
+
+
+class AuthSignupDisabled(DomainError):
+    status_code = 403
+    code = "auth_signup_disabled"
+
+
+class AuthEmailRejected(DomainError):
+    status_code = 422
+    code = "auth_email_rejected"
+
+
+class AuthEmailNotConfirmed(DomainError):
+    status_code = 403
+    code = "auth_email_not_confirmed"
+
+
+class AuthRateLimited(DomainError):
+    status_code = 429
+    code = "auth_rate_limited"
+
+
+@dataclass(frozen=True, slots=True)
+class AuthAdminIdentity:
+    subject: str
+    email: str
+
+
 class AuthGateway(Protocol):
     def sign_up(self, *, email: str, password: str) -> str: ...
 
     def sign_in(self, *, email: str, password: str) -> dict: ...
+
+    def invite_user(self, *, email: str, redirect_to: str | None = None) -> str: ...
+
+    def get_user(self, *, subject: str) -> AuthAdminIdentity: ...
 
 
 class StorageGateway(Protocol):
@@ -57,15 +95,89 @@ class SupabaseHTTPClient:
         return headers
 
     @staticmethod
-    def _raise(response: httpx.Response, operation: str) -> None:
+    def _error_code(response: httpx.Response) -> str | None:
+        try:
+            payload = response.json()
+        except ValueError:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        for key in ("code", "error_code"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip().lower()
+        return None
+
+    @classmethod
+    def _raise(cls, response: httpx.Response, operation: str) -> None:
         if response.is_success:
             return
+        error_code = cls._error_code(response)
+        logger.warning(
+            "Supabase Auth rechazó una operación: operation=%s status=%s code=%s",
+            operation,
+            response.status_code,
+            error_code or "unknown",
+        )
+        if response.status_code == 429 or error_code in {
+            "over_email_send_rate_limit",
+            "over_request_rate_limit",
+        }:
+            raise AuthRateLimited(
+                "Hay demasiadas solicitudes de autenticación. "
+                "Espera unos minutos e inténtalo de nuevo"
+            )
+        if error_code in {"weak_password", "password_too_short"}:
+            raise AuthPasswordRejected(
+                "La contraseña no cumple los requisitos de seguridad del servicio"
+            )
+        if error_code in {"signup_disabled", "email_provider_disabled"}:
+            raise AuthSignupDisabled(
+                "El registro de nuevas cuentas está deshabilitado temporalmente"
+            )
+        if error_code == "email_not_confirmed":
+            raise AuthEmailNotConfirmed(
+                "Confirma tu correo electrónico antes de iniciar sesión"
+            )
+        if error_code in {"email_address_not_authorized", "email_address_invalid"}:
+            raise AuthEmailRejected(
+                "El servicio de correo no puede autorizar esa dirección en este momento"
+            )
+        if error_code in {"invalid_credentials", "invalid_grant"}:
+            raise AuthenticationRequired("Correo o contraseña incorrectos")
+        if error_code in {"email_exists", "user_already_exists"}:
+            raise AuthIdentityAlreadyExists(
+                "No fue posible crear la cuenta. Si ya te registraste, "
+                "inicia sesión o completa el vínculo"
+            )
         if response.status_code in {400, 409, 422}:
-            raise Conflict(f"Supabase rechazó {operation}")
+            raise Conflict(
+                f"Supabase rechazó {operation}; revisa los datos e inténtalo nuevamente"
+            )
         raise ExternalServiceUnavailable(f"Supabase no pudo completar {operation}")
 
+    @staticmethod
+    def _post(*args, **kwargs) -> httpx.Response:
+        try:
+            return httpx.post(*args, **kwargs)
+        except httpx.RequestError as exc:
+            logger.warning("Fallo de red al comunicarse con Supabase Auth: %s", type(exc).__name__)
+            raise ExternalServiceUnavailable(
+                "El servicio de autenticación no está disponible temporalmente"
+            ) from exc
+
+    @staticmethod
+    def _get(*args, **kwargs) -> httpx.Response:
+        try:
+            return httpx.get(*args, **kwargs)
+        except httpx.RequestError as exc:
+            logger.warning("Fallo de red al consultar Supabase Auth: %s", type(exc).__name__)
+            raise ExternalServiceUnavailable(
+                "El servicio de autenticación no está disponible temporalmente"
+            ) from exc
+
     def sign_up(self, *, email: str, password: str) -> str:
-        response = httpx.post(
+        response = self._post(
             f"{self.url.rstrip('/')}/auth/v1/signup",
             headers=self._public_headers(),
             json={"email": email, "password": password},
@@ -117,20 +229,91 @@ class SupabaseHTTPClient:
             ) from exc
 
     def sign_in(self, *, email: str, password: str) -> dict:
-        response = httpx.post(
+        response = self._post(
             f"{self.url.rstrip('/')}/auth/v1/token?grant_type=password",
             headers=self._public_headers(),
             json={"email": email, "password": password},
             timeout=self.timeout,
         )
         self._raise(response, "el inicio de sesión")
-        data = response.json()
+        try:
+            data = response.json()
+            if not isinstance(data, dict):
+                raise TypeError
+            access_token = data["access_token"]
+            refresh_token = data["refresh_token"]
+            expires_in = data["expires_in"]
+            if not isinstance(access_token, str) or not isinstance(refresh_token, str):
+                raise TypeError
+        except (ValueError, KeyError, TypeError) as exc:
+            raise ExternalServiceUnavailable(
+                "Supabase devolvió una respuesta de inicio de sesión inválida"
+            ) from exc
         return {
-            "access_token": data["access_token"],
-            "refresh_token": data["refresh_token"],
-            "expires_in": data["expires_in"],
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "expires_in": expires_in,
             "token_type": data.get("token_type", "bearer"),
         }
+
+    def invite_user(self, *, email: str, redirect_to: str | None = None) -> str:
+        endpoint = f"{self.url.rstrip('/')}/auth/v1/invite"
+        if redirect_to:
+            endpoint = f"{endpoint}?redirect_to={quote(redirect_to, safe=':/')}"
+        response = self._post(
+            endpoint,
+            headers=self._server_headers(),
+            json={"email": email},
+            timeout=self.timeout,
+        )
+        self._raise(response, "la invitación del empleado")
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise ExternalServiceUnavailable(
+                "Supabase devolvió una invitación inválida"
+            ) from exc
+        return self._admin_user(payload, requested_email=email).subject
+
+    def get_user(self, *, subject: str) -> AuthAdminIdentity:
+        try:
+            canonical = str(UUID(subject))
+        except ValueError as exc:
+            raise Conflict("El identificador Auth no es un UUID válido") from exc
+        response = self._get(
+            f"{self.url.rstrip('/')}/auth/v1/admin/users/{canonical}",
+            headers=self._server_headers(),
+            timeout=self.timeout,
+        )
+        self._raise(response, "la verificación administrativa de la identidad")
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise ExternalServiceUnavailable(
+                "Supabase devolvió una identidad administrativa inválida"
+            ) from exc
+        return self._admin_user(payload)
+
+    @staticmethod
+    def _admin_user(
+        payload: object, *, requested_email: str | None = None
+    ) -> AuthAdminIdentity:
+        if not isinstance(payload, dict):
+            raise ExternalServiceUnavailable("Supabase devolvió una identidad inválida")
+        candidate = payload.get("user", payload)
+        if not isinstance(candidate, dict):
+            raise ExternalServiceUnavailable("Supabase devolvió una identidad inválida")
+        email = candidate.get("email")
+        if not isinstance(email, str) or "@" not in email:
+            raise ExternalServiceUnavailable("Supabase no informó un correo verificable")
+        normalized = email.strip().lower()
+        if requested_email and normalized != requested_email.strip().lower():
+            raise ExternalServiceUnavailable("Supabase devolvió una identidad distinta")
+        try:
+            subject = str(UUID(str(candidate.get("id", ""))))
+        except ValueError as exc:
+            raise ExternalServiceUnavailable("Supabase devolvió un UUID inválido") from exc
+        return AuthAdminIdentity(subject=subject, email=normalized)
 
     def upload(self, *, bucket: str, path: str, content: bytes, content_type: str) -> None:
         target = f"{quote(bucket, safe='')}/{quote(path, safe='/')}"

@@ -185,7 +185,7 @@ class PaymentService:
             raise NotFound("Transacción no encontrada")
         order = lock_order(session, payment.id_pedido)
         if principal.is_employee:
-            AuthorizationService.require(session, principal, "PAGO_VERIFICAR")
+            AuthorizationService.require(session, principal, "PAGO_CONSULTAR")
         elif order.id_cliente != principal.persona_id:
             raise PermissionDenied("El pago pertenece a otro cliente")
         return payment
@@ -196,7 +196,7 @@ class PaymentService:
     ) -> list[Transaccion]:
         order = lock_order(session, order_id)
         if principal.is_employee:
-            AuthorizationService.require(session, principal, "PAGO_VERIFICAR")
+            AuthorizationService.require(session, principal, "PAGO_CONSULTAR")
         elif order.id_cliente != principal.persona_id:
             raise PermissionDenied("El pedido pertenece a otro cliente")
         return list(
@@ -204,5 +204,16 @@ class PaymentService:
                 select(Transaccion)
                 .where(Transaccion.id_pedido == order_id)
                 .order_by(Transaccion.fecha_hora.desc())
+            )
+        )
+
+    @staticmethod
+    def list_all(session: Session, principal: Principal) -> list[Transaccion]:
+        AuthorizationService.require(session, principal, "PAGO_CONSULTAR")
+        return list(
+            session.scalars(
+                select(Transaccion)
+                .order_by(Transaccion.fecha_hora.desc())
+                .limit(200)
             )
         )

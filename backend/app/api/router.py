@@ -6,6 +6,7 @@ from app.api.routes import (
     customers,
     deliveries,
     designs,
+    employees,
     health,
     inventory,
     losses,
@@ -32,3 +33,4 @@ api_router.include_router(losses.router)
 api_router.include_router(purchases.router)
 api_router.include_router(deliveries.router)
 api_router.include_router(reports.router)
+api_router.include_router(employees.router)

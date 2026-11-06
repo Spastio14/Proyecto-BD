@@ -13,6 +13,8 @@ permisos desde PostgreSQL y protege diseños y comprobantes con URLs firmadas.
 - Supabase Auth cerrado por defecto hasta inyectar configuración válida.
 - Credencial firmada para invitados sin crear usuarios Auth convencionales.
 - Buckets privados para diseños y comprobantes, mediados por FastAPI.
+- Dashboards separados para clientes, administración, contabilidad, ventas y producción.
+- Invitaciones de empleados sin contraseñas asignadas por administradores.
 - Pytest contra PostgreSQL real, incluidas carreras con varias conexiones.
 
 ```text
@@ -49,6 +51,8 @@ Storage, poolers, RLS, rotación y preflight está en
 están en [Pruebas Fase 3](docs/pruebas/fase-3-resultados.md).
 La ejecución completa para la defensa está en
 [Demostración final de BD](docs/guias/demostracion-final-bd.md).
+La inicialización del primer administrador y las invitaciones se documentan en
+[Empleados, roles y dashboards](docs/guias/fase-4-2-empleados-roles.md).
 
 ## Seguridad y alcance
 

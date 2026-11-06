@@ -22,7 +22,7 @@ from app.services.authorization import AuthorizationService
 class PurchaseService:
     @staticmethod
     def list_providers(session: Session, principal: Principal) -> list[Proveedor]:
-        AuthorizationService.require(session, principal, "INVENTARIO_GESTIONAR")
+        AuthorizationService.require(session, principal, "PROVEEDOR_CONSULTAR")
         return list(session.scalars(select(Proveedor).order_by(Proveedor.nombre)))
 
     @staticmethod
@@ -35,7 +35,7 @@ class PurchaseService:
         email: str | None,
         address: str | None,
     ) -> Proveedor:
-        AuthorizationService.require(session, principal, "INVENTARIO_GESTIONAR")
+        AuthorizationService.require(session, principal, "PROVEEDOR_GESTIONAR")
         provider = Proveedor(
             nombre=name.strip(),
             telefono=phone,
@@ -65,7 +65,7 @@ class PurchaseService:
         document_number: str | None,
         lines: list[tuple[int, Decimal, Decimal]],
     ) -> Compra:
-        AuthorizationService.require(session, principal, "INVENTARIO_GESTIONAR")
+        AuthorizationService.require(session, principal, "COMPRA_REGISTRAR")
         provider = session.get(Proveedor, provider_id)
         if provider is None or provider.estado != "ACTIVO":
             raise NotFound("Proveedor activo no encontrado")
@@ -111,7 +111,7 @@ class PurchaseService:
         unit_cost: Decimal,
         principal: Principal,
     ) -> DetalleCompra:
-        AuthorizationService.require(session, principal, "INVENTARIO_GESTIONAR")
+        AuthorizationService.require(session, principal, "COMPRA_REGISTRAR")
         purchase = self._lock_purchase(session, purchase_id)
         if purchase.estado != "BORRADOR":
             raise Conflict("Sólo una compra en borrador admite detalles")
@@ -129,7 +129,7 @@ class PurchaseService:
     def confirm(
         self, session: Session, *, purchase_id: int, principal: Principal
     ) -> Compra:
-        AuthorizationService.require(session, principal, "INVENTARIO_GESTIONAR")
+        AuthorizationService.require(session, principal, "COMPRA_AUTORIZAR")
         purchase = self._lock_purchase(session, purchase_id)
         if purchase.estado == "CONFIRMADA":
             return purchase
@@ -195,7 +195,7 @@ class PurchaseService:
     def list_purchases(
         session: Session, *, principal: Principal, provider_id: int | None = None
     ) -> list[Compra]:
-        AuthorizationService.require(session, principal, "INVENTARIO_GESTIONAR")
+        AuthorizationService.require(session, principal, "COMPRA_CONSULTAR")
         statement = select(Compra).order_by(Compra.fecha_compra.desc())
         if provider_id is not None:
             statement = statement.where(Compra.id_proveedor == provider_id)
@@ -205,7 +205,7 @@ class PurchaseService:
     def details(
         session: Session, *, purchase_id: int, principal: Principal
     ) -> list[DetalleCompra]:
-        AuthorizationService.require(session, principal, "INVENTARIO_GESTIONAR")
+        AuthorizationService.require(session, principal, "COMPRA_CONSULTAR")
         if session.get(Compra, purchase_id) is None:
             raise NotFound("Compra no encontrada")
         return list(

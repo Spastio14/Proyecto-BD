@@ -27,7 +27,7 @@ from app.services.authorization import AuthorizationService
 class ReportService:
     @staticmethod
     def dashboard(session: Session, principal: Principal) -> dict[str, object]:
-        AuthorizationService.require(session, principal, "PEDIDO_GESTIONAR")
+        AuthorizationService.require(session, principal, "REPORTE_FINANCIERO_CONSULTAR")
 
         sold = session.execute(
             select(

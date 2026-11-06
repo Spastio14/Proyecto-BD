@@ -98,3 +98,17 @@ Los reembolsos permanecen pendientes porque faltan porcentajes de retención,
 autoridad, estados elegibles, método de devolución y tratamiento de pagos
 parciales. No se calcula utilidad neta hasta aprobar la asignación de compras,
 pérdidas, gastos, retenciones y reembolsos al periodo contable.
+
+## Autenticación y roles de Fase 4.2
+
+| Regla | Implementación | Evidencia |
+|---|---|---|
+| Registro público sólo de clientes | esquema estricto y `RegistrationCoordinator` | caso 130 y regresión de registro |
+| Identidad efectiva | `GET /auth/me` consulta cuenta, perfil, roles y permisos | casos 121–122 y 133 |
+| Invitación sin contraseña | `EmployeeInvitationCoordinator` y API Admin Auth | caso 125 |
+| Activación verificada | JWT Supabase + invitación EMPLEADO inactiva | casos 125–126 |
+| No convertir clientes | validación en invitación y bootstrap | casos 127 y 132 |
+| Administración inicial | comando manual verifica UUID con API Auth | casos 131–132 |
+| Menor privilegio | matriz DML y permisos separados por operación | casos 123–124 y runner SQL |
+| Permisos dinámicos | asignaciones activas se consultan por petición | caso 128 |
+| Dashboard por perfil | prioridad de roles sin confiar en el navegador | casos 121–122 y 133 |
