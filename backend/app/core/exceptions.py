@@ -25,6 +25,27 @@ class TokenInvalid(AuthenticationRequired):
     code = "token_invalid"
 
 
+class TokenAlgorithmUnsupported(TokenInvalid):
+    code = "token_algorithm_unsupported"
+
+
+class TokenSigningKeyNotFound(TokenInvalid):
+    code = "token_signing_key_not_found"
+
+
+class TokenIssuerInvalid(TokenInvalid):
+    code = "token_issuer_invalid"
+
+
+class TokenAudienceInvalid(TokenInvalid):
+    code = "token_audience_invalid"
+
+
+class IdentityVerificationUnavailable(DomainError):
+    status_code = 503
+    code = "identity_verification_unavailable"
+
+
 class AccountLinkMissing(DomainError):
     status_code = 404
     code = "account_link_missing"

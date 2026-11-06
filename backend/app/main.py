@@ -89,6 +89,7 @@ def create_app(
             project_url=configured.supabase_url,
             project_ref=configured.supabase_project_ref,
             audience=configured.supabase_jwt_audience,
+            user_token_validator=gateway,
         )
         application.state.token_verifier = token_verifier
         providers.append(SupabaseAuthenticationProvider(token_verifier))

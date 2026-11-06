@@ -3,7 +3,12 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 
-from app.core.exceptions import Conflict
+from app.core.exceptions import (
+    Conflict,
+    IdentityVerificationUnavailable,
+    TokenExpired,
+    TokenInvalid,
+)
 from app.integrations.supabase import (
     AuthEmailNotConfirmed,
     AuthEmailRejected,
@@ -271,3 +276,66 @@ def test_invitation_rejects_invalid_session_payload(monkeypatch, payload):
     monkeypatch.setattr(httpx, "post", lambda *args, **kwargs: response(200, payload))
     with pytest.raises(ExternalServiceUnavailable, match="sesión válida|respuesta inválida"):
         client().exchange_invitation(token_hash="secure-invitation-token-hash")
+
+
+def test_hs256_validation_uses_official_user_endpoint_and_public_headers(monkeypatch):
+    expected = uuid4()
+    captured = {}
+
+    def fake_get(*args, **kwargs):
+        captured["url"] = args[0]
+        captured.update(kwargs)
+        return response(200, {"id": str(expected), "email": "USER@EXAMPLE.TEST"})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    identity = client().validate_access_token(access_token="user-access-token")
+    assert identity == {"id": str(expected), "email": "user@example.test"}
+    assert captured["url"].endswith("/auth/v1/user")
+    assert captured["headers"] == {
+        "apikey": "sb_publishable_example",
+        "Authorization": "Bearer user-access-token",
+    }
+    assert "sb_secret_example" not in captured["headers"].values()
+
+
+@pytest.mark.parametrize(
+    ("status_code", "error_code", "expected"),
+    [
+        (401, "bad_jwt", TokenInvalid),
+        (401, "token_expired", TokenExpired),
+        (401, "invalid_api_key", IdentityVerificationUnavailable),
+        (429, "over_request_rate_limit", IdentityVerificationUnavailable),
+        (503, "service_unavailable", IdentityVerificationUnavailable),
+    ],
+)
+def test_hs256_validation_distinguishes_remote_failures(
+    monkeypatch, status_code, error_code, expected
+):
+    monkeypatch.setattr(
+        httpx,
+        "get",
+        lambda *args, **kwargs: response(status_code, {"error_code": error_code}),
+    )
+    with pytest.raises(expected):
+        client().validate_access_token(access_token="user-access-token")
+
+
+def test_hs256_validation_connection_failure_is_transient(monkeypatch):
+    def fail(*args, **kwargs):
+        raise httpx.ConnectError("unavailable", request=httpx.Request("GET", "https://x"))
+
+    monkeypatch.setattr(httpx, "get", fail)
+    with pytest.raises(IdentityVerificationUnavailable):
+        client().validate_access_token(access_token="user-access-token")
+
+
+def test_hs256_diagnostic_never_logs_access_token(monkeypatch, caplog):
+    secret_token = "header-sensitive.payload-sensitive.signature-sensitive"
+    monkeypatch.setattr(
+        httpx,
+        "get",
+        lambda *args, **kwargs: response(401, {"error_code": "bad_jwt"}),
+    )
+    with pytest.raises(TokenInvalid):
+        client().validate_access_token(access_token=secret_token)
+    assert secret_token not in caplog.text
