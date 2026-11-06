@@ -9,6 +9,14 @@ from app.services.inventory import InventoryService
 router = APIRouter(prefix="/inventario", tags=["inventario"])
 
 
+@router.get("/articulos")
+def list_inventory(
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> list[dict[str, object]]:
+    return InventoryService.list_with_availability(session, principal)
+
+
 @router.get("/articulos/{article_id}/disponibilidad")
 def availability(
     article_id: int,

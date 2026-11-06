@@ -9,6 +9,25 @@ from app.services.losses import LossLineInput, LossService
 router = APIRouter(prefix="/perdidas", tags=["perdidas"])
 
 
+@router.get("")
+def list_losses(
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> list[dict]:
+    return [
+        {
+            "id_perdida": item.id_perdida,
+            "id_pedido": item.id_pedido,
+            "fecha_hora": item.fecha_hora,
+            "momento": item.momento_ocurrencia,
+            "tipo": item.tipo_incidente,
+            "motivo": item.motivo,
+            "estado": item.estado_registro,
+        }
+        for item in LossService.list_all(session, principal)
+    ]
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 def report_loss(
     payload: LossCreate,

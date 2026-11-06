@@ -90,6 +90,46 @@ class QuotationService:
             statement = statement.where(Cotizacion.id_cliente == principal.persona_id)
         return list(session.scalars(statement))
 
+    @staticmethod
+    def decide(
+        session: Session,
+        *,
+        quote_id: int,
+        decision: str,
+        principal: Principal,
+        reason: str,
+    ) -> Cotizacion:
+        if decision not in {"ACEPTADA", "RECHAZADA"}:
+            raise Conflict("Decisión de cotización inválida")
+        quote = session.scalar(
+            select(Cotizacion).where(Cotizacion.id_cotizacion == quote_id).with_for_update()
+        )
+        if quote is None:
+            raise NotFound("Cotización no encontrada")
+        if principal.is_employee:
+            AuthorizationService.require(session, principal, "PEDIDO_GESTIONAR")
+        elif quote.id_cliente != principal.persona_id:
+            raise PermissionDenied("La cotización pertenece a otro cliente")
+        if quote.estado == decision:
+            return quote
+        if quote.estado != "EMITIDA":
+            raise Conflict("La cotización ya no admite una decisión")
+        if decision == "ACEPTADA" and quote.fecha_vencimiento < datetime.now(UTC):
+            raise Conflict("La cotización está vencida")
+        previous = quote.estado
+        quote.estado = decision
+        AuditService.record(
+            session,
+            principal=principal,
+            action="DECIDIR_COTIZACION",
+            object_type="COTIZACION",
+            object_reference=str(quote.id_cotizacion),
+            reason=reason,
+            before={"estado": previous},
+            after={"estado": decision},
+        )
+        return quote
+
     def convert(self, session: Session, *, quote_id: int, principal: Principal) -> Pedido:
         quote = session.scalar(
             select(Cotizacion).where(Cotizacion.id_cotizacion == quote_id).with_for_update()

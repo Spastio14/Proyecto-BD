@@ -4,6 +4,7 @@ from app.api.routes import (
     auth,
     catalog,
     customers,
+    deliveries,
     designs,
     health,
     inventory,
@@ -11,7 +12,9 @@ from app.api.routes import (
     orders,
     payments,
     production,
+    purchases,
     quotations,
+    reports,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -26,3 +29,6 @@ api_router.include_router(inventory.router)
 api_router.include_router(designs.router)
 api_router.include_router(production.router)
 api_router.include_router(losses.router)
+api_router.include_router(purchases.router)
+api_router.include_router(deliveries.router)
+api_router.include_router(reports.router)

@@ -393,3 +393,116 @@ class RegistroAuditoria(Base):
     valor_nuevo: Mapped[str | None] = mapped_column(Text)
     motivo: Mapped[str] = mapped_column(String(500))
     origen_accion: Mapped[str] = mapped_column(String(80))
+
+
+class EtapaProceso(Base):
+    __tablename__ = "etapa_proceso"
+    id_etapa: Mapped[int] = mapped_column(Integer, primary_key=True)
+    nombre: Mapped[str] = mapped_column(String(180))
+    descripcion: Mapped[str | None] = mapped_column(String(500))
+    orden_referencia: Mapped[int] = mapped_column(Integer)
+    estado: Mapped[str] = mapped_column(String(80))
+
+
+class AsignacionEtapa(Base):
+    __tablename__ = "asignacion_etapa"
+    id_asignacion: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id_pedido: Mapped[int] = mapped_column(ForeignKey("pedido.id_pedido"))
+    id_etapa: Mapped[int] = mapped_column(ForeignKey("etapa_proceso.id_etapa"))
+    id_empleado: Mapped[int] = mapped_column(ForeignKey("empleado.id_persona"))
+    fecha_inicio: Mapped[datetime] = mapped_column(instant)
+    fecha_fin: Mapped[datetime | None] = mapped_column(instant)
+    origen_asignacion: Mapped[str] = mapped_column(String(80))
+    estado: Mapped[str] = mapped_column(String(80))
+    motivo_reasignacion: Mapped[str | None] = mapped_column(String(500))
+
+
+class SolicitudCambio(Base):
+    __tablename__ = "solicitud_cambio"
+    id_solicitud_cambio: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id_pedido: Mapped[int] = mapped_column(ForeignKey("pedido.id_pedido"))
+    fecha_solicitud: Mapped[datetime] = mapped_column(instant)
+    descripcion: Mapped[str] = mapped_column(String(500))
+    motivo: Mapped[str | None] = mapped_column(String(500))
+    decision: Mapped[str | None] = mapped_column(String(80))
+    costo_adicional_estimado: Mapped[Decimal] = mapped_column(money)
+    cargo_adicional_aprobado: Mapped[Decimal | None] = mapped_column(money)
+
+
+class Reembolso(Base):
+    __tablename__ = "reembolso"
+    id_reembolso: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id_cancelacion: Mapped[int] = mapped_column(ForeignKey("cancelacion.id_cancelacion"))
+    fecha_solicitud: Mapped[datetime] = mapped_column(instant)
+    monto_solicitado: Mapped[Decimal] = mapped_column(money)
+    monto_aprobado: Mapped[Decimal] = mapped_column(money)
+    motivo: Mapped[str] = mapped_column(String(500))
+    estado: Mapped[str] = mapped_column(String(80))
+    fecha_resolucion: Mapped[datetime | None] = mapped_column(instant)
+
+
+class Proveedor(Base):
+    __tablename__ = "proveedor"
+    id_proveedor: Mapped[int] = mapped_column(Integer, primary_key=True)
+    nombre: Mapped[str] = mapped_column(String(180))
+    telefono: Mapped[str | None] = mapped_column(String(30))
+    correo: Mapped[str | None] = mapped_column(String(254))
+    direccion: Mapped[str | None] = mapped_column(String(500))
+    estado: Mapped[str] = mapped_column(String(80))
+
+
+class Compra(Base):
+    __tablename__ = "compra"
+    id_compra: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id_proveedor: Mapped[int] = mapped_column(ForeignKey("proveedor.id_proveedor"))
+    fecha_compra: Mapped[datetime] = mapped_column(instant)
+    numero_documento: Mapped[str | None] = mapped_column(String(120))
+    estado: Mapped[str] = mapped_column(String(80))
+    total_compra: Mapped[Decimal] = mapped_column(money)
+
+
+class DetalleCompra(Base):
+    __tablename__ = "detalle_compra"
+    id_compra: Mapped[int] = mapped_column(ForeignKey("compra.id_compra"), primary_key=True)
+    numero_linea: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id_articulo: Mapped[int] = mapped_column(ForeignKey("articulo_inventariable.id_articulo"))
+    cantidad_comprada: Mapped[Decimal] = mapped_column(quantity)
+    costo_unitario_compra: Mapped[Decimal] = mapped_column(unit_cost)
+    importe: Mapped[Decimal] = mapped_column(money)
+
+
+class Gasto(Base):
+    __tablename__ = "gasto"
+    id_gasto: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id_empleado: Mapped[int] = mapped_column(ForeignKey("empleado.id_persona"))
+    concepto: Mapped[str] = mapped_column(String(80))
+    categoria: Mapped[str] = mapped_column(String(80))
+    monto: Mapped[Decimal] = mapped_column(money)
+    fecha: Mapped[datetime] = mapped_column(instant)
+    metodo_pago: Mapped[str] = mapped_column(String(80))
+    banco_receptor: Mapped[str | None] = mapped_column(String(120))
+    referencia_bancaria: Mapped[str | None] = mapped_column(String(120))
+    observaciones: Mapped[str | None] = mapped_column(Text)
+
+
+class AgenciaEnvio(Base):
+    __tablename__ = "agencia_envio"
+    id_agencia: Mapped[int] = mapped_column(Integer, primary_key=True)
+    nombre: Mapped[str] = mapped_column(String(180))
+    tipo_agencia: Mapped[str] = mapped_column(String(80))
+    telefono: Mapped[str | None] = mapped_column(String(30))
+    estado: Mapped[str] = mapped_column(String(80))
+
+
+class Envio(Base):
+    __tablename__ = "envio"
+    id_envio: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id_pedido: Mapped[int] = mapped_column(ForeignKey("pedido.id_pedido"))
+    id_agencia: Mapped[int | None] = mapped_column(ForeignKey("agencia_envio.id_agencia"))
+    direccion_entrega: Mapped[str] = mapped_column(String(500))
+    nombre_receptor: Mapped[str] = mapped_column(String(120))
+    telefono_receptor: Mapped[str | None] = mapped_column(String(30))
+    tarifa_acordada: Mapped[Decimal] = mapped_column(money)
+    fecha_programada: Mapped[datetime | None] = mapped_column(instant)
+    fecha_entrega_real: Mapped[datetime | None] = mapped_column(instant)
+    estado: Mapped[str] = mapped_column(String(80))

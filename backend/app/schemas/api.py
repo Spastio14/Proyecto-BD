@@ -79,6 +79,11 @@ class QuoteRead(ORMModel):
     fecha_vencimiento: datetime
 
 
+class QuoteDecision(StrictInput):
+    decision: Literal["ACEPTADA", "RECHAZADA"]
+    reason: str = Field(min_length=1, max_length=500)
+
+
 class PaymentReport(StrictInput):
     milestone_number: int = Field(gt=0)
     idempotency_key: UUID
@@ -96,7 +101,54 @@ class PaymentRead(ORMModel):
     clave_idem: UUID
 
 
+class PaymentReject(StrictInput):
+    reason: str = Field(min_length=1, max_length=500)
+
+
 class CancelRequest(StrictInput):
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class OrderTransitionRequest(StrictInput):
+    target: Literal["EN_DISENO", "LISTO"]
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class ProviderCreate(StrictInput):
+    name: str = Field(min_length=1, max_length=180)
+    phone: str | None = Field(default=None, max_length=30)
+    email: str | None = Field(default=None, max_length=254)
+    address: str | None = Field(default=None, max_length=500)
+
+
+class PurchaseLineCreate(StrictInput):
+    article_id: int = Field(gt=0)
+    quantity: Decimal = Field(gt=0)
+    unit_cost: Decimal = Field(ge=0)
+
+
+class PurchaseCreate(StrictInput):
+    provider_id: int = Field(gt=0)
+    document_number: str | None = Field(default=None, max_length=120)
+    lines: list[PurchaseLineCreate] = Field(min_length=1)
+
+
+class PurchaseLineAdd(StrictInput):
+    article_id: int = Field(gt=0)
+    quantity: Decimal = Field(gt=0)
+    unit_cost: Decimal = Field(ge=0)
+
+
+class DeliverySchedule(StrictInput):
+    agency_id: int | None = Field(default=None, gt=0)
+    address: str = Field(min_length=1, max_length=500)
+    recipient_name: str = Field(min_length=1, max_length=120)
+    recipient_phone: str | None = Field(default=None, max_length=30)
+    agreed_fee: Decimal = Field(default=Decimal("0.00"), ge=0)
+    scheduled_at: datetime | None = None
+
+
+class DeliveryComplete(StrictInput):
     reason: str = Field(min_length=1, max_length=500)
 
 

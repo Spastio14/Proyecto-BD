@@ -175,3 +175,34 @@ class PaymentService:
             after={"estado_verificacion": "RECHAZADO"},
         )
         return payment
+
+    @staticmethod
+    def get_owned(
+        session: Session, *, payment_id: int, principal: Principal
+    ) -> Transaccion:
+        payment = session.get(Transaccion, payment_id)
+        if payment is None:
+            raise NotFound("Transacción no encontrada")
+        order = lock_order(session, payment.id_pedido)
+        if principal.is_employee:
+            AuthorizationService.require(session, principal, "PAGO_VERIFICAR")
+        elif order.id_cliente != principal.persona_id:
+            raise PermissionDenied("El pago pertenece a otro cliente")
+        return payment
+
+    @staticmethod
+    def list_for_order(
+        session: Session, *, order_id: int, principal: Principal
+    ) -> list[Transaccion]:
+        order = lock_order(session, order_id)
+        if principal.is_employee:
+            AuthorizationService.require(session, principal, "PAGO_VERIFICAR")
+        elif order.id_cliente != principal.persona_id:
+            raise PermissionDenied("El pedido pertenece a otro cliente")
+        return list(
+            session.scalars(
+                select(Transaccion)
+                .where(Transaccion.id_pedido == order_id)
+                .order_by(Transaccion.fecha_hora.desc())
+            )
+        )
