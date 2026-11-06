@@ -162,6 +162,19 @@ Un fallo al descargar JWKS se devuelve como 503
 desactiva la validación criptográfica. Una firma, audiencia, emisor o token
 inválidos siguen cerrando el acceso con 401.
 
+Los proyectos que todavía firman sesiones con HS256 no publican esa clave
+simétrica en JWKS. En ese caso FastAPI envía el token a `GET /auth/v1/user`, con
+la clave publicable como `apikey`, para que Supabase Auth compruebe la firma. El
+JWT secret no se solicita ni se usa. ES256 y RS256 continúan verificándose
+localmente contra JWKS.
+
+El diagnóstico seguro del backend permite distinguir estos códigos sin imprimir
+el token: `token_expired`, `token_algorithm_unsupported`,
+`token_signing_key_not_found`, `token_issuer_invalid`,
+`token_audience_invalid`, `token_invalid` e
+`identity_verification_unavailable`. El log sólo contiene `reason`, `algorithm`
+y una huella corta de `kid`.
+
 Prioridad cuando existen varios roles: ADMINISTRADOR, CONTADOR, VENDEDOR y
 PRODUCCION. La prioridad sólo elige la interfaz; cada endpoint vuelve a consultar
 permisos en PostgreSQL. Cambiar una asignación afecta la siguiente petición.

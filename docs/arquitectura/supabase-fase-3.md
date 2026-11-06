@@ -108,16 +108,30 @@ se configurará cuando exista el frontend autorizado.
 Cada petición protegida sigue este orden:
 
 1. extrae exactamente un `Bearer` de `Authorization`;
-2. acepta sólo firmas asimétricas ES256 o RS256;
-3. obtiene la clave pública desde el JWKS oficial del proyecto;
-4. verifica firma, `iss`, `aud`, `exp`, `iat` y `sub`;
+2. inspecciona únicamente `alg` y `kid` para elegir el verificador;
+3. para ES256 o RS256 obtiene la clave pública indicada por `kid` desde el JWKS
+   oficial y verifica localmente firma, `iss`, `aud`, `exp`, `iat` y `sub`;
+4. para HS256 valida primero los claims temporales y delega la firma al endpoint
+   oficial `GET /auth/v1/user`, con la clave publicable en `apikey` y el JWT del
+   usuario en `Authorization`;
 5. resuelve `sub` contra una `cuenta_acceso` activa;
 6. deriva cliente o empleado desde las tablas locales activas;
 7. consulta roles y permisos en PostgreSQL cuando el caso de uso los exige.
 
-No se hace decode-only. No se aceptan roles, precios, propietarios ni permisos de
-claims personalizados o metadatos del navegador. Un token de otro proyecto no
-supera la comprobación del emisor.
+HS256 nunca se verifica con el JWT secret y el backend no lo configura ni lo
+lee. El decode sin firma se usa sólo para comprobar formato y claims antes de la
+llamada oficial; la identidad no se acepta hasta que Supabase Auth valida el
+mismo token. No se aceptan roles, precios, propietarios ni permisos de claims
+personalizados o metadatos del navegador. Un token de otro proyecto no supera
+la comprobación del emisor.
+
+Referencia oficial consultada: [Supabase Auth — Verifying with a shared secret
+signing key](https://supabase.com/docs/guides/auth/jwts#verifying-with-a-shared-secret-signing-key).
+
+Los rechazos registran únicamente motivo, algoritmo y una huella SHA-256 corta
+del `kid`. Nunca registran JWT, payload, `sub`, correo, contraseña ni claves. Los
+códigos diferencian token vencido, algoritmo no admitido, emisor, audiencia,
+`kid` ausente/desconocido y servicio de verificación no disponible.
 
 Las claves modernas `sb_publishable_*` y `sb_secret_*` se envían únicamente en
 el encabezado `apikey`. No son JWT y no se usan como `Authorization: Bearer`.

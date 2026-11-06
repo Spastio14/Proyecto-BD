@@ -6,7 +6,8 @@ from uuid import uuid4
 
 import jwt
 import pytest
-from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import sessionmaker
@@ -19,7 +20,12 @@ from app.core.exceptions import (
     AuthenticationRequired,
     Conflict,
     PermissionDenied,
+    TokenAlgorithmUnsupported,
+    TokenAudienceInvalid,
     TokenExpired,
+    TokenInvalid,
+    TokenIssuerInvalid,
+    TokenSigningKeyNotFound,
 )
 from app.core.security import (
     GuestAuthenticationProvider,
@@ -29,6 +35,7 @@ from app.core.security import (
     SupabaseTokenVerifier,
 )
 from app.db.session import build_engine
+from app.main import create_app
 from app.models.entities import CuentaAcceso, Persona, Transaccion, VersionDiseno
 from app.services.authorization import AuthorizationService
 from app.services.identity import RegistrationCoordinator
@@ -51,25 +58,28 @@ class StaticJWKClient:
 
 
 def token(
-    private_key,
+    signing_key,
     *,
+    algorithm="ES256",
+    subject=None,
+    email=None,
     issuer=PROJECT_URL + "/auth/v1",
     expires_delta=300,
     audience="authenticated",
+    kid="test-key",
 ):
     now = datetime.now(UTC)
-    return jwt.encode(
-        {
-            "sub": str(uuid4()),
-            "iss": issuer,
-            "aud": audience,
-            "iat": now,
-            "exp": now + timedelta(seconds=expires_delta),
-        },
-        private_key,
-        algorithm="ES256",
-        headers={"kid": "test-key"},
-    )
+    payload = {
+        "sub": subject or str(uuid4()),
+        "iss": issuer,
+        "aud": audience,
+        "iat": now,
+        "exp": now + timedelta(seconds=expires_delta),
+    }
+    if email is not None:
+        payload["email"] = email
+    headers = {"kid": kid} if kid is not None else None
+    return jwt.encode(payload, signing_key, algorithm=algorithm, headers=headers)
 
 
 def verifier(public_key):
@@ -78,6 +88,37 @@ def verifier(public_key):
     )
     instance.jwks = StaticJWKClient(public_key)
     return instance
+
+
+class StaticUserTokenValidator:
+    def __init__(self, *, expected_token: str, subject: str, email: str):
+        self.expected_token = expected_token
+        self.subject = subject
+        self.email = email
+        self.calls = 0
+
+    def validate_access_token(self, *, access_token: str):
+        self.calls += 1
+        if access_token != self.expected_token:
+            raise TokenInvalid("Token inesperado")
+        return {"id": self.subject, "email": self.email}
+
+
+class LoginGateway:
+    def __init__(self, access_token: str, validator=None):
+        self.access_token = access_token
+        self.validator = validator
+
+    def sign_in(self, *, email: str, password: str):
+        return {
+            "access_token": self.access_token,
+            "refresh_token": "refresh-token-for-test",
+            "expires_in": 3600,
+            "token_type": "bearer",
+        }
+
+    def validate_access_token(self, *, access_token: str):
+        return self.validator.validate_access_token(access_token=access_token)
 
 
 def request(*, bearer=None, cookie=None):
@@ -138,22 +179,145 @@ def test_51_valid_project_jwt_is_cryptographically_verified():
 def test_52_jwt_with_invalid_signature_is_rejected():
     trusted = ec.generate_private_key(ec.SECP256R1())
     attacker = ec.generate_private_key(ec.SECP256R1())
-    with pytest.raises(jwt.InvalidSignatureError):
+    with pytest.raises(TokenInvalid):
         verifier(trusted.public_key()).verify(token(attacker))
 
 
 def test_53_expired_jwt_is_rejected():
     private_key = ec.generate_private_key(ec.SECP256R1())
-    with pytest.raises(jwt.ExpiredSignatureError):
+    with pytest.raises(TokenExpired):
         verifier(private_key.public_key()).verify(token(private_key, expires_delta=-1))
 
 
 def test_54_token_from_another_project_is_rejected():
     private_key = ec.generate_private_key(ec.SECP256R1())
-    with pytest.raises(jwt.InvalidIssuerError):
+    with pytest.raises(TokenIssuerInvalid):
         verifier(private_key.public_key()).verify(
             token(private_key, issuer="https://otro-proyecto.supabase.co/auth/v1")
         )
+
+
+def test_rs256_project_jwt_is_cryptographically_verified():
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    raw = token(private_key, algorithm="RS256")
+    claims = verifier(private_key.public_key()).verify(raw)
+    assert claims["aud"] == "authenticated"
+
+
+def test_hs256_is_verified_by_auth_user_endpoint_without_shared_secret():
+    subject = str(uuid4())
+    email = "hs256@example.test"
+    raw = token(
+        "test-only-shared-secret-with-sufficient-length",
+        algorithm="HS256",
+        subject=subject,
+        email=email,
+        kid=None,
+    )
+    validator = StaticUserTokenValidator(
+        expected_token=raw,
+        subject=subject,
+        email=email,
+    )
+    instance = SupabaseTokenVerifier(
+        project_url=PROJECT_URL,
+        project_ref=PROJECT_REF,
+        audience="authenticated",
+        user_token_validator=validator,
+    )
+    assert instance.verify(raw)["sub"] == subject
+    assert validator.calls == 1
+
+
+def test_hs256_expiration_is_rejected_before_remote_call():
+    subject = str(uuid4())
+    raw = token(
+        "test-only-shared-secret-with-sufficient-length",
+        algorithm="HS256",
+        subject=subject,
+        email="hs256@example.test",
+        expires_delta=-1,
+        kid=None,
+    )
+    validator = StaticUserTokenValidator(
+        expected_token=raw,
+        subject=subject,
+        email="hs256@example.test",
+    )
+    instance = SupabaseTokenVerifier(
+        project_url=PROJECT_URL,
+        project_ref=PROJECT_REF,
+        audience="authenticated",
+        user_token_validator=validator,
+    )
+    with pytest.raises(TokenExpired):
+        instance.verify(raw)
+    assert validator.calls == 0
+
+
+def test_hs256_remote_identity_must_match_signed_subject(caplog):
+    subject = str(uuid4())
+    raw = token(
+        "test-only-shared-secret-with-sufficient-length",
+        algorithm="HS256",
+        subject=subject,
+        email="hs256@example.test",
+        kid=None,
+    )
+    validator = StaticUserTokenValidator(
+        expected_token=raw,
+        subject=str(uuid4()),
+        email="hs256@example.test",
+    )
+    instance = SupabaseTokenVerifier(
+        project_url=PROJECT_URL,
+        project_ref=PROJECT_REF,
+        audience="authenticated",
+        user_token_validator=validator,
+    )
+    with pytest.raises(TokenInvalid, match="identidad distinta"):
+        instance.verify(raw)
+    assert raw not in caplog.text
+    assert subject not in caplog.text
+    assert "hs256@example.test" not in caplog.text
+
+
+def test_wrong_audience_has_specific_safe_diagnostic(caplog):
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    raw = token(private_key, audience="otro-publico")
+    with pytest.raises(TokenAudienceInvalid):
+        verifier(private_key.public_key()).verify(raw)
+    assert "reason=audience_invalid" in caplog.text
+    assert raw not in caplog.text
+
+
+def test_missing_or_unknown_kid_is_distinguished():
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    with pytest.raises(TokenSigningKeyNotFound, match="identifica"):
+        verifier(private_key.public_key()).verify(token(private_key, kid=None))
+
+    class UnknownJWKClient:
+        def get_signing_key_from_jwt(self, token):
+            raise jwt.PyJWKClientError("no matching key")
+
+    instance = verifier(private_key.public_key())
+    instance.jwks = UnknownJWKClient()
+    with pytest.raises(TokenSigningKeyNotFound, match="no está disponible"):
+        instance.verify(token(private_key, kid="unknown-key"))
+
+
+def test_unsupported_algorithm_is_rejected_before_remote_validation():
+    raw = token(
+        "x" * 64,
+        algorithm="HS384",
+        kid=None,
+    )
+    with pytest.raises(TokenAlgorithmUnsupported):
+        SupabaseTokenVerifier(
+            project_url=PROJECT_URL,
+            project_ref=PROJECT_REF,
+            audience="authenticated",
+        ).verify(raw)
 
 
 def test_jwks_connection_failure_is_transient_not_invalid_token():
@@ -169,6 +333,82 @@ def test_jwks_connection_failure_is_transient_not_invalid_token():
     private_key = ec.generate_private_key(ec.SECP256R1())
     with pytest.raises(IdentityVerificationUnavailable):
         instance.verify(token(private_key))
+
+
+@pytest.mark.parametrize("algorithm", ["ES256", "RS256", "HS256"])
+def test_login_me_dashboard_flow_supports_all_supabase_algorithms(engine, algorithm):
+    subject = "11111111-1111-4111-8111-111111111111"
+    email = "cliente@example.test"
+    if algorithm == "ES256":
+        signing_key = ec.generate_private_key(ec.SECP256R1())
+        public_key = signing_key.public_key()
+        kid = "es-test-key"
+    elif algorithm == "RS256":
+        signing_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        public_key = signing_key.public_key()
+        kid = "rs-test-key"
+    else:
+        signing_key = "test-only-shared-secret-with-sufficient-length"
+        public_key = None
+        kid = None
+    raw = token(
+        signing_key,
+        algorithm=algorithm,
+        subject=subject,
+        email=email,
+        kid=kid,
+    )
+    validator = StaticUserTokenValidator(
+        expected_token=raw,
+        subject=subject,
+        email=email,
+    )
+    gateway = LoginGateway(raw, validator)
+    instance = SupabaseTokenVerifier(
+        project_url=PROJECT_URL,
+        project_ref=PROJECT_REF,
+        audience="authenticated",
+        user_token_validator=gateway,
+    )
+    if public_key is not None:
+        instance.jwks = StaticJWKClient(public_key)
+    application = create_app(
+        Settings(database_url=str(engine.url), app_env="test"),
+        engine=engine,
+        auth_provider=SupabaseAuthenticationProvider(instance),
+    )
+    application.state.auth_gateway = gateway
+
+    with TestClient(application) as client:
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": "password-for-test"},
+        )
+        assert login.status_code == 200
+        profile = client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {login.json()['access_token']}"},
+        )
+        assert profile.status_code == 200
+        assert profile.json()["dashboard_inicial"] == "/app/cliente/"
+    assert validator.calls == (1 if algorithm == "HS256" else 0)
+
+
+def test_configured_app_wires_public_auth_client_as_hs256_validator(engine):
+    application = create_app(
+        Settings(
+            database_url=str(engine.url),
+            app_env="test",
+            supabase_url=PROJECT_URL,
+            supabase_project_ref=PROJECT_REF,
+            supabase_public_key="sb_publishable_test",
+        ),
+        engine=engine,
+    )
+    assert (
+        application.state.token_verifier.user_token_validator
+        is application.state.auth_gateway
+    )
 
 
 def test_55_verified_subject_resolves_linked_active_customer(session):

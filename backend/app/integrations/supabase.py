@@ -6,7 +6,14 @@ from uuid import UUID
 
 import httpx
 
-from app.core.exceptions import AuthenticationRequired, Conflict, DomainError
+from app.core.exceptions import (
+    AuthenticationRequired,
+    Conflict,
+    DomainError,
+    IdentityVerificationUnavailable,
+    TokenExpired,
+    TokenInvalid,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +72,8 @@ class AuthGateway(Protocol):
     def exchange_code(self, *, code: str, code_verifier: str) -> dict: ...
 
     def update_password(self, *, access_token: str, password: str) -> None: ...
+
+    def validate_access_token(self, *, access_token: str) -> dict[str, str | None]: ...
 
 
 class StorageGateway(Protocol):
@@ -281,6 +290,63 @@ class SupabaseHTTPClient:
                 "Supabase devolvió una respuesta de inicio de sesión inválida"
             ) from exc
         return self._session(data, "el inicio de sesión")
+
+    def validate_access_token(self, *, access_token: str) -> dict[str, str | None]:
+        """Delega en Supabase Auth la firma de tokens HS256 heredados."""
+        try:
+            response = self._get(
+                f"{self.url.rstrip('/')}/auth/v1/user",
+                headers=self._public_headers()
+                | {"Authorization": f"Bearer {access_token}"},
+                timeout=self.timeout,
+            )
+        except ExternalServiceUnavailable as exc:
+            raise IdentityVerificationUnavailable(
+                "No fue posible verificar la sesión con Supabase Auth"
+            ) from exc
+        if not response.is_success:
+            error_code = self._error_code(response)
+            logger.warning(
+                "Supabase rechazó la validación del JWT: status=%s code=%s",
+                response.status_code,
+                error_code or "unknown",
+            )
+            if response.status_code == 429 or response.status_code >= 500:
+                raise IdentityVerificationUnavailable(
+                    "Supabase Auth no puede verificar la sesión temporalmente"
+                )
+            if error_code in {"session_expired", "token_expired"}:
+                raise TokenExpired("La sesión venció; inicia sesión nuevamente")
+            if error_code in {"invalid_api_key", "api_key_invalid"}:
+                raise IdentityVerificationUnavailable(
+                    "La clave publicable de Supabase no es válida"
+                )
+            raise TokenInvalid("Supabase rechazó el token de acceso")
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise IdentityVerificationUnavailable(
+                "Supabase devolvió una identidad incompatible"
+            ) from exc
+        if not isinstance(payload, dict):
+            raise IdentityVerificationUnavailable(
+                "Supabase devolvió una identidad incompatible"
+            )
+        try:
+            subject = str(UUID(str(payload.get("id", ""))))
+        except ValueError as exc:
+            raise IdentityVerificationUnavailable(
+                "Supabase devolvió una identidad sin UUID válido"
+            ) from exc
+        email = payload.get("email")
+        if email is not None and not isinstance(email, str):
+            raise IdentityVerificationUnavailable(
+                "Supabase devolvió una identidad incompatible"
+            )
+        return {
+            "id": subject,
+            "email": email.strip().lower() if isinstance(email, str) else None,
+        }
 
     def exchange_invitation(self, *, token_hash: str) -> dict:
         response = self._post(
