@@ -12,7 +12,14 @@ from jwt import PyJWKClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import AuthenticationRequired, DomainError
+from app.core.exceptions import (
+    AccountInactive,
+    AccountLinkMissing,
+    AuthenticationRequired,
+    DomainError,
+    TokenExpired,
+    TokenInvalid,
+)
 from app.db.session import get_session
 from app.models.entities import Cliente, CuentaAcceso, Empleado
 
@@ -59,7 +66,14 @@ class SupabaseTokenVerifier:
         header = jwt.get_unverified_header(token)
         if header.get("alg") not in {"RS256", "ES256"}:
             raise jwt.InvalidAlgorithmError("Algoritmo JWT no permitido")
-        key = self.jwks.get_signing_key_from_jwt(token).key
+        try:
+            key = self.jwks.get_signing_key_from_jwt(token).key
+        except jwt.PyJWKClientConnectionError as exc:
+            # Un fallo al descargar JWKS no demuestra que el token sea inválido.
+            # Se conserva el cierre seguro, pero se permite al cliente reintentar.
+            raise IdentityVerificationUnavailable(
+                "No fue posible consultar temporalmente las claves de firma"
+            ) from exc
         claims = jwt.decode(
             token,
             key,
@@ -84,12 +98,14 @@ class SupabaseAuthenticationProvider:
             return None
         try:
             claims = self.verifier.verify(token)
+        except jwt.ExpiredSignatureError as exc:
+            raise TokenExpired("La sesión venció; inicia sesión nuevamente") from exc
         except jwt.PyJWTError as exc:
-            raise AuthenticationRequired("Token de acceso inválido o vencido") from exc
+            raise TokenInvalid("Token de acceso inválido") from exc
         try:
             subject = str(UUID(str(claims.get("sub", ""))))
         except ValueError as exc:
-            raise AuthenticationRequired("Token sin sujeto verificable") from exc
+            raise TokenInvalid("Token sin sujeto verificable") from exc
         account = session.scalar(
             select(CuentaAcceso).where(
                 CuentaAcceso.identificador_autenticacion == subject,
@@ -97,14 +113,21 @@ class SupabaseAuthenticationProvider:
             )
         )
         if account is None:
-            raise AuthenticationRequired("La cuenta local no está activa o vinculada")
+            linked = session.scalar(
+                select(CuentaAcceso).where(CuentaAcceso.identificador_autenticacion == subject)
+            )
+            if linked is None:
+                raise AccountLinkMissing(
+                    "La identidad verificada aún no tiene un vínculo comercial"
+                )
+            raise AccountInactive("La cuenta local está suspendida o bloqueada")
         employee = session.get(Empleado, account.id_persona)
         if employee is not None and employee.estado_laboral == "ACTIVO":
             return Principal(account.id_persona, "EMPLEADO")
         customer = session.get(Cliente, account.id_persona)
         if customer is not None and customer.estado == "ACTIVO":
             return Principal(account.id_persona, "CLIENTE")
-        raise AuthenticationRequired("La persona vinculada no tiene un perfil activo")
+        raise AccountInactive("La persona vinculada no tiene un perfil activo")
 
 
 class GuestCredentialSigner:
@@ -185,17 +208,19 @@ def get_verified_auth_identity(request: Request) -> VerifiedAuthIdentity:
         raise AuthenticationRequired("Se requiere una sesión Supabase verificada")
     try:
         claims = verifier.verify(token)
+    except jwt.ExpiredSignatureError as exc:
+        raise TokenExpired("La sesión venció; solicita un enlace nuevo") from exc
     except jwt.PyJWTError as exc:
-        raise AuthenticationRequired("Token de acceso inválido o vencido") from exc
+        raise TokenInvalid("Token de acceso inválido") from exc
     try:
         subject = str(UUID(str(claims.get("sub", ""))))
     except ValueError as exc:
-        raise AuthenticationRequired("Token sin sujeto verificable") from exc
+        raise TokenInvalid("Token sin sujeto verificable") from exc
     email = claims.get("email")
     if not isinstance(email, str) or not email.strip() or "@" not in email:
-        raise AuthenticationRequired("La sesión no contiene un correo verificable")
+        raise TokenInvalid("La sesión no contiene un correo verificable")
     if claims.get("is_anonymous") is True:
-        raise AuthenticationRequired("Una sesión anónima no puede completar este vínculo")
+        raise TokenInvalid("Una sesión anónima no puede completar este vínculo")
     return VerifiedAuthIdentity(subject=subject, email=email.strip().lower())
 
 

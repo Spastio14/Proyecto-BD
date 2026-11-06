@@ -72,6 +72,9 @@ python -m unittest discover \
     -s "$repo_dir/scripts/supabase/tests" -p 'test_*.py'
 echo "OK: parser de projects list validado con formatos compatibles e inválidos."
 
+node --test "$repo_dir/frontend/tests"/*.test.js
+echo "OK: flujos de sesión del navegador validados."
+
 cd "$backend_dir"
 uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 18000 \
     >/tmp/s2r-fase2-uvicorn.log 2>&1 &

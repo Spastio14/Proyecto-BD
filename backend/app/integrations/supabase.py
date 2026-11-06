@@ -60,6 +60,12 @@ class AuthGateway(Protocol):
 
     def get_user(self, *, subject: str) -> AuthAdminIdentity: ...
 
+    def exchange_invitation(self, *, token_hash: str) -> dict: ...
+
+    def exchange_code(self, *, code: str, code_verifier: str) -> dict: ...
+
+    def update_password(self, *, access_token: str, password: str) -> None: ...
+
 
 class StorageGateway(Protocol):
     def upload(self, *, bucket: str, path: str, content: bytes, content_type: str) -> None: ...
@@ -136,9 +142,7 @@ class SupabaseHTTPClient:
                 "El registro de nuevas cuentas está deshabilitado temporalmente"
             )
         if error_code == "email_not_confirmed":
-            raise AuthEmailNotConfirmed(
-                "Confirma tu correo electrónico antes de iniciar sesión"
-            )
+            raise AuthEmailNotConfirmed("Confirma tu correo electrónico antes de iniciar sesión")
         if error_code in {"email_address_not_authorized", "email_address_invalid"}:
             raise AuthEmailRejected(
                 "El servicio de correo no puede autorizar esa dirección en este momento"
@@ -151,9 +155,7 @@ class SupabaseHTTPClient:
                 "inicia sesión o completa el vínculo"
             )
         if response.status_code in {400, 409, 422}:
-            raise Conflict(
-                f"Supabase rechazó {operation}; revisa los datos e inténtalo nuevamente"
-            )
+            raise Conflict(f"Supabase rechazó {operation}; revisa los datos e inténtalo nuevamente")
         raise ExternalServiceUnavailable(f"Supabase no pudo completar {operation}")
 
     @staticmethod
@@ -175,6 +177,42 @@ class SupabaseHTTPClient:
             raise ExternalServiceUnavailable(
                 "El servicio de autenticación no está disponible temporalmente"
             ) from exc
+
+    @staticmethod
+    def _put(*args, **kwargs) -> httpx.Response:
+        try:
+            return httpx.put(*args, **kwargs)
+        except httpx.RequestError as exc:
+            logger.warning("Fallo de red al comunicarse con Supabase Auth: %s", type(exc).__name__)
+            raise ExternalServiceUnavailable(
+                "El servicio de autenticación no está disponible temporalmente"
+            ) from exc
+
+    @staticmethod
+    def _session(payload: object, operation: str) -> dict:
+        if not isinstance(payload, dict):
+            raise ExternalServiceUnavailable(
+                f"Supabase devolvió una respuesta inválida durante {operation}"
+            )
+        access_token = payload.get("access_token")
+        refresh_token = payload.get("refresh_token")
+        expires_in = payload.get("expires_in")
+        if (
+            not isinstance(access_token, str)
+            or not access_token
+            or not isinstance(refresh_token, str)
+            or not refresh_token
+            or not isinstance(expires_in, (int, float))
+        ):
+            raise ExternalServiceUnavailable(
+                f"Supabase no devolvió una sesión válida durante {operation}"
+            )
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "expires_in": expires_in,
+            "token_type": payload.get("token_type", "bearer"),
+        }
 
     def sign_up(self, *, email: str, password: str) -> str:
         response = self._post(
@@ -238,23 +276,53 @@ class SupabaseHTTPClient:
         self._raise(response, "el inicio de sesión")
         try:
             data = response.json()
-            if not isinstance(data, dict):
-                raise TypeError
-            access_token = data["access_token"]
-            refresh_token = data["refresh_token"]
-            expires_in = data["expires_in"]
-            if not isinstance(access_token, str) or not isinstance(refresh_token, str):
-                raise TypeError
-        except (ValueError, KeyError, TypeError) as exc:
+        except ValueError as exc:
             raise ExternalServiceUnavailable(
                 "Supabase devolvió una respuesta de inicio de sesión inválida"
             ) from exc
-        return {
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "expires_in": expires_in,
-            "token_type": data.get("token_type", "bearer"),
-        }
+        return self._session(data, "el inicio de sesión")
+
+    def exchange_invitation(self, *, token_hash: str) -> dict:
+        response = self._post(
+            f"{self.url.rstrip('/')}/auth/v1/verify",
+            headers=self._public_headers(),
+            json={"token_hash": token_hash, "type": "invite"},
+            timeout=self.timeout,
+        )
+        self._raise(response, "la verificación de la invitación")
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise ExternalServiceUnavailable(
+                "Supabase devolvió una verificación de invitación inválida"
+            ) from exc
+        return self._session(payload, "la verificación de la invitación")
+
+    def exchange_code(self, *, code: str, code_verifier: str) -> dict:
+        response = self._post(
+            f"{self.url.rstrip('/')}/auth/v1/token?grant_type=pkce",
+            headers=self._public_headers(),
+            json={"auth_code": code, "code_verifier": code_verifier},
+            timeout=self.timeout,
+        )
+        self._raise(response, "el intercambio PKCE de la invitación")
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise ExternalServiceUnavailable(
+                "Supabase devolvió un intercambio PKCE inválido"
+            ) from exc
+        return self._session(payload, "el intercambio PKCE de la invitación")
+
+    def update_password(self, *, access_token: str, password: str) -> None:
+        headers = self._public_headers() | {"Authorization": f"Bearer {access_token}"}
+        response = self._put(
+            f"{self.url.rstrip('/')}/auth/v1/user",
+            headers=headers,
+            json={"password": password},
+            timeout=self.timeout,
+        )
+        self._raise(response, "la definición de la contraseña inicial")
 
     def invite_user(self, *, email: str, redirect_to: str | None = None) -> str:
         endpoint = f"{self.url.rstrip('/')}/auth/v1/invite"
@@ -270,9 +338,7 @@ class SupabaseHTTPClient:
         try:
             payload = response.json()
         except ValueError as exc:
-            raise ExternalServiceUnavailable(
-                "Supabase devolvió una invitación inválida"
-            ) from exc
+            raise ExternalServiceUnavailable("Supabase devolvió una invitación inválida") from exc
         return self._admin_user(payload, requested_email=email).subject
 
     def get_user(self, *, subject: str) -> AuthAdminIdentity:
@@ -295,9 +361,7 @@ class SupabaseHTTPClient:
         return self._admin_user(payload)
 
     @staticmethod
-    def _admin_user(
-        payload: object, *, requested_email: str | None = None
-    ) -> AuthAdminIdentity:
+    def _admin_user(payload: object, *, requested_email: str | None = None) -> AuthAdminIdentity:
         if not isinstance(payload, dict):
             raise ExternalServiceUnavailable("Supabase devolvió una identidad inválida")
         candidate = payload.get("user", payload)

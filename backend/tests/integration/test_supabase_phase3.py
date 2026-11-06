@@ -13,10 +13,18 @@ from sqlalchemy.orm import sessionmaker
 from starlette.requests import Request
 
 from app.core.config import Settings
-from app.core.exceptions import AuthenticationRequired, Conflict, PermissionDenied
+from app.core.exceptions import (
+    AccountInactive,
+    AccountLinkMissing,
+    AuthenticationRequired,
+    Conflict,
+    PermissionDenied,
+    TokenExpired,
+)
 from app.core.security import (
     GuestAuthenticationProvider,
     GuestCredentialSigner,
+    IdentityVerificationUnavailable,
     SupabaseAuthenticationProvider,
     SupabaseTokenVerifier,
 )
@@ -148,6 +156,21 @@ def test_54_token_from_another_project_is_rejected():
         )
 
 
+def test_jwks_connection_failure_is_transient_not_invalid_token():
+    instance = SupabaseTokenVerifier(
+        project_url=PROJECT_URL, project_ref=PROJECT_REF, audience="authenticated"
+    )
+
+    class UnavailableJWKClient:
+        def get_signing_key_from_jwt(self, token):
+            raise jwt.PyJWKClientConnectionError("temporary")
+
+    instance.jwks = UnavailableJWKClient()
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    with pytest.raises(IdentityVerificationUnavailable):
+        instance.verify(token(private_key))
+
+
 def test_55_verified_subject_resolves_linked_active_customer(session):
     provider = SupabaseAuthenticationProvider(
         FakeVerifier({"sub": "11111111-1111-4111-8111-111111111111"})
@@ -159,8 +182,19 @@ def test_55_verified_subject_resolves_linked_active_customer(session):
 
 def test_56_unlinked_subject_is_rejected(session):
     provider = SupabaseAuthenticationProvider(FakeVerifier({"sub": str(uuid4())}))
-    with pytest.raises(AuthenticationRequired, match="no está activa o vinculada"):
+    with pytest.raises(AccountLinkMissing, match="vínculo comercial"):
         provider.authenticate(request(bearer="verified"), session)
+
+
+def test_expired_token_has_specific_error(session):
+    class ExpiredVerifier:
+        def verify(self, token):
+            raise jwt.ExpiredSignatureError("expired")
+
+    with pytest.raises(TokenExpired):
+        SupabaseAuthenticationProvider(ExpiredVerifier()).authenticate(
+            request(bearer="expired"), session
+        )
 
 
 def test_57_roles_in_jwt_do_not_grant_employee_identity(session):
@@ -406,7 +440,7 @@ def test_71_suspended_local_account_is_rejected(session):
     provider = SupabaseAuthenticationProvider(
         FakeVerifier({"sub": "11111111-1111-4111-8111-111111111111"})
     )
-    with pytest.raises(AuthenticationRequired):
+    with pytest.raises(AccountInactive):
         provider.authenticate(request(bearer="verified"), session)
 
 

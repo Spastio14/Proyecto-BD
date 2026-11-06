@@ -18,9 +18,7 @@ from app.models.entities import (
 from app.services.audit import AuditService
 from app.services.authorization import AuthorizationService
 
-ALLOWED_EMPLOYEE_ROLES = frozenset(
-    {"ADMINISTRADOR", "CONTADOR", "VENDEDOR", "PRODUCCION"}
-)
+ALLOWED_EMPLOYEE_ROLES = frozenset({"ADMINISTRADOR", "CONTADOR", "VENDEDOR", "PRODUCCION"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,9 +186,7 @@ class EmployeeInvitationCoordinator:
                 {"key": f"employee-auth:{subject}"},
             )
             duplicate = session.scalar(
-                select(CuentaAcceso).where(
-                    CuentaAcceso.identificador_autenticacion == subject
-                )
+                select(CuentaAcceso).where(CuentaAcceso.identificador_autenticacion == subject)
             )
             if duplicate is not None and duplicate.id_persona != employee_id:
                 raise Conflict("La identidad Auth ya está vinculada a otra persona")
@@ -349,6 +345,16 @@ class EmployeeInvitationCoordinator:
             employee = session.get(Empleado, person.id_persona)
             if employee is None or employee.estado_laboral == "SUSPENDIDO":
                 raise Conflict("El perfil no admite activación")
+            if session.get(Cliente, person.id_persona) is not None:
+                raise Conflict("Una cuenta de cliente no puede activarse como empleado")
+            assignment = session.scalar(
+                select(AsignacionRol).where(
+                    AsignacionRol.id_empleado == person.id_persona,
+                    AsignacionRol.estado == "ACTIVA",
+                )
+            )
+            if assignment is None:
+                raise Conflict("La invitación no tiene un rol administrativo activo")
             employee.estado_laboral = "ACTIVO"
             AuditService.record(
                 session,
@@ -359,8 +365,51 @@ class EmployeeInvitationCoordinator:
                 reason="Identidad Supabase verificada tras invitación administrativa",
                 after={"estado_laboral": "ACTIVO"},
             )
+            return EmployeeInviteResult(person.id_persona, employee.codigo_empleado, "ACTIVO")
+
+    def validate_pending(self, identity: VerifiedAuthIdentity) -> EmployeeInviteResult:
+        """Confirma que el JWT corresponde a una invitación administrativa pendiente."""
+        with self.factory() as session:
+            account = session.scalar(
+                select(CuentaAcceso).where(
+                    CuentaAcceso.identificador_autenticacion == identity.subject
+                )
+            )
+            if account is not None:
+                if account.estado_cuenta != "ACTIVA":
+                    raise Conflict("La cuenta de acceso está suspendida o bloqueada")
+                person = session.get(Persona, account.id_persona)
+                if person is None or (person.correo_electronico or "").lower() != identity.email:
+                    raise Conflict("La identidad no coincide con la invitación")
+            else:
+                candidates = list(
+                    session.scalars(
+                        select(Persona)
+                        .join(Empleado, Empleado.id_persona == Persona.id_persona)
+                        .where(
+                            func.lower(Persona.correo_electronico) == identity.email,
+                            Empleado.estado_laboral == "INACTIVO",
+                        )
+                    )
+                )
+                if len(candidates) != 1:
+                    raise Conflict("No existe una invitación administrativa verificable")
+                person = candidates[0]
+            if session.get(Cliente, person.id_persona) is not None:
+                raise Conflict("Una cuenta de cliente no puede activarse como empleado")
+            employee = session.get(Empleado, person.id_persona)
+            if employee is None or employee.estado_laboral != "INACTIVO":
+                raise Conflict("La invitación ya fue utilizada o no admite activación")
+            assignment = session.scalar(
+                select(AsignacionRol).where(
+                    AsignacionRol.id_empleado == person.id_persona,
+                    AsignacionRol.estado == "ACTIVA",
+                )
+            )
+            if assignment is None:
+                raise Conflict("La invitación no tiene un rol administrativo activo")
             return EmployeeInviteResult(
-                person.id_persona, employee.codigo_empleado, "ACTIVO"
+                person.id_persona, employee.codigo_empleado, "INVITACION_VERIFICADA"
             )
 
     def bootstrap_admin(
@@ -399,14 +448,15 @@ class EmployeeInvitationCoordinator:
                     raise Conflict("La cuenta pertenece a otro tipo de perfil")
                 self._ensure_admin_assignment(session, employee.id_persona, admin_role.id_rol)
                 employee.estado_laboral = "ACTIVO"
-                return EmployeeInviteResult(
-                    employee.id_persona, employee.codigo_empleado, "ACTIVO"
+                return EmployeeInviteResult(employee.id_persona, employee.codigo_empleado, "ACTIVO")
+            if (
+                session.scalar(
+                    select(Persona.id_persona).where(
+                        func.lower(Persona.correo_electronico) == identity.email
+                    )
                 )
-            if session.scalar(
-                select(Persona.id_persona).where(
-                    func.lower(Persona.correo_electronico) == identity.email
-                )
-            ) is not None:
+                is not None
+            ):
                 raise Conflict("El correo ya pertenece a un perfil; requiere revisión manual")
             person = Persona(
                 nombres=names.strip(),

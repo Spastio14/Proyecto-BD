@@ -206,3 +206,68 @@ def test_employee_invitation_accepts_root_user_and_uses_server_headers(monkeypat
     assert result == str(expected)
     assert captured["headers"] == {"apikey": "sb_secret_example"}
     assert "redirect_to=" in captured["url"]
+
+
+def auth_session():
+    return {
+        "access_token": "header.payload.signature",
+        "refresh_token": "refresh-token",
+        "expires_in": 3600,
+        "token_type": "bearer",
+    }
+
+
+def test_invitation_token_hash_is_verified_with_public_key(monkeypatch):
+    captured = {}
+
+    def fake_post(*args, **kwargs):
+        captured["url"] = args[0]
+        captured.update(kwargs)
+        return response(200, auth_session())
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    session = client().exchange_invitation(token_hash="secure-invitation-token-hash")
+    assert session["access_token"] == "header.payload.signature"
+    assert captured["url"].endswith("/auth/v1/verify")
+    assert captured["headers"] == {"apikey": "sb_publishable_example"}
+    assert captured["json"] == {
+        "token_hash": "secure-invitation-token-hash",
+        "type": "invite",
+    }
+
+
+def test_pkce_invitation_code_uses_official_token_exchange(monkeypatch):
+    captured = {}
+
+    def fake_post(*args, **kwargs):
+        captured["url"] = args[0]
+        captured.update(kwargs)
+        return response(200, auth_session())
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    client().exchange_code(code="auth-code", code_verifier="v" * 48)
+    assert captured["url"].endswith("/auth/v1/token?grant_type=pkce")
+    assert captured["json"] == {"auth_code": "auth-code", "code_verifier": "v" * 48}
+
+
+def test_initial_password_uses_user_jwt_and_never_server_secret(monkeypatch):
+    captured = {}
+
+    def fake_put(*args, **kwargs):
+        captured.update(kwargs)
+        return response(200, auth_user())
+
+    monkeypatch.setattr(httpx, "put", fake_put)
+    client().update_password(access_token="employee-access-token", password="new-password")
+    assert captured["headers"] == {
+        "apikey": "sb_publishable_example",
+        "Authorization": "Bearer employee-access-token",
+    }
+    assert captured["json"] == {"password": "new-password"}
+
+
+@pytest.mark.parametrize("payload", [{}, {"access_token": "only"}, [], "invalid"])
+def test_invitation_rejects_invalid_session_payload(monkeypatch, payload):
+    monkeypatch.setattr(httpx, "post", lambda *args, **kwargs: response(200, payload))
+    with pytest.raises(ExternalServiceUnavailable, match="sesión válida|respuesta inválida"):
+        client().exchange_invitation(token_hash="secure-invitation-token-hash")
