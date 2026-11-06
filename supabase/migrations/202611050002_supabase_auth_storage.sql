@@ -39,8 +39,10 @@ begin
                 file_size_limit = excluded.file_size_limit,
                 allowed_mime_types = excluded.allowed_mime_types
         $sql$;
-        execute 'revoke all on storage.buckets from anon, authenticated';
-        execute 'revoke all on storage.objects from anon, authenticated';
+        -- Los privilegios de estas tablas son administrados por Supabase y son
+        -- globales, no por bucket. No se revocan aquí. Al no crear policies para
+        -- estos IDs, la RLS administrada mantiene ambos buckets cerrados al
+        -- acceso directo de anon/authenticated; FastAPI usa el servicio privado.
     end if;
 end
 $block$;

@@ -11,7 +11,8 @@ esquema PostgreSQL:
    escalas mayoristas; su aplicación queda exclusivamente en FastAPI.
 5. `202611050002_supabase_auth_storage.sql`: añade la referencia opcional y
    coherente del comprobante a `transaccion` y configura dos buckets privados
-   cuando corre dentro de Supabase. Conserva las 41 tablas.
+   cuando corre dentro de Supabase. Conserva las 41 tablas y no modifica los
+   grants globales administrados de `storage.buckets` o `storage.objects`.
 
 No contienen datos. Supabase proporciona los roles `anon` y `authenticated`; el
 runner local los crea antes de aplicar las migraciones. La extensión

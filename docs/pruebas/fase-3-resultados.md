@@ -22,12 +22,18 @@ OK: 41 tablas, 64 FK, nombres conciliados, integridad y RLS verificados.
 OK: dos reconstrucciones limpias y pruebas PostgreSQL/RLS completadas.
 
 ./backend/tests/run.sh
+15 pruebas unitarias del parser aprobadas
 77 casos recopilados
 75 passed, 2 skipped, 1 warning
 ```
 
 Uvicorn inició y `/api/v1/health` respondió contra PostgreSQL antes de Pytest.
 Ruff comprobó y formateó `app` y `tests` sin errores.
+
+La regresión del preflight cubre la lista JSON heredada, el objeto real de CLI
+3.0.0 con `projects`, el sobre `data.projects`, nombre/ref exactos, estado sano,
+tipos inválidos, entradas que no son objetos, duplicados y formatos desconocidos.
+Las 15 pruebas unitarias aprobaron el 2026-11-05.
 
 Los 25 casos nuevos ejecutados demostraron:
 
@@ -79,14 +85,14 @@ como éxito.
 
 ## Pendiente remoto
 
-No pudo ejecutarse `scripts/supabase/preflight.sh` porque faltan un CLI instalado
-en `PATH`, un enlace autenticado y conectividad permitida a los dominios
-Supabase. Antes de
-cualquier `db push` se necesita una contraseña nueva o credencial equivalente,
-inyectada de forma segura, y acceso de red aprobado. Entonces se ejecutarán, en
-este orden, `migration list --linked`, `db push --linked --dry-run` y las dos
-pruebas remotas de sólo lectura. Sólo después de revisar esos resultados se puede
-solicitar autorización para aplicar las migraciones.
+No pudo ejecutarse `scripts/supabase/preflight.sh` porque este entorno no tiene
+un enlace autenticado, secretos ni conectividad permitida a los dominios
+Supabase. El script admite CLI instalado o `npx`, verifica el proyecto mediante
+la API, consulta PostgreSQL con `--read-only`, ejecuta
+`migration list --remote`, ejecuta `db push --remote --dry-run --skip-vault` y
+comprueba los metadatos públicos JWKS sin imprimir material de clave. Sólo después
+de revisar esos resultados se puede solicitar autorización para aplicar las
+migraciones.
 
 El warning de Starlette sobre una futura transición de `TestClient` a `httpx2`
 proviene de una dependencia y no afectó la ejecución.

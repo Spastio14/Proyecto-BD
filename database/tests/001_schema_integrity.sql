@@ -47,6 +47,17 @@ select pg_temp.assert_true(
 );
 
 select pg_temp.assert_true(
+    (select count(*) = 2
+     from storage.buckets
+     where id in ('disenos', 'comprobantes')
+       and public is false)
+    and has_table_privilege('anon', 'storage.buckets', 'SELECT')
+    and has_table_privilege('authenticated', 'storage.objects', 'SELECT')
+    and has_table_privilege('authenticated', 'storage.objects', 'INSERT'),
+    'los buckets deben ser privados sin revocar privilegios globales administrados'
+);
+
+select pg_temp.assert_true(
     (select count(*) = 64
      from pg_constraint c
      join pg_namespace n on n.oid = c.connamespace
