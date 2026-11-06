@@ -5,10 +5,19 @@ Usa `fetch` contra `/api/v1`, conserva el token de Supabase sólo en
 `sessionStorage` y no contiene reglas comerciales, identidades simuladas ni
 credenciales privilegiadas.
 
-Incluye catálogo, registro/inicio de sesión, cotizaciones, pedidos y reporte de
-pagos para clientes. El panel de empleado consulta pedidos, cotizaciones,
-inventario, compras, proveedores, pérdidas y reportes, y permite ejecutar las
-decisiones esenciales autorizadas por el backend.
+La página pública ofrece catálogo, inicio de sesión y registro exclusivo de
+clientes. Después del login consulta `/api/v1/auth/me` y navega al dashboard
+determinado por roles y permisos efectivos de PostgreSQL:
+
+- `/app/cliente/`
+- `/app/admin/`
+- `/app/contabilidad/`
+- `/app/ventas/`
+- `/app/produccion/`
+
+Los menús se adaptan al perfil para mejorar la experiencia, pero la autorización
+real permanece en cada servicio FastAPI. La clave privada de Supabase nunca se
+envía al navegador.
 
 La guía de uso y demostración está en
-`docs/guias/demostracion-final-bd.md`.
+`docs/guias/fase-4-2-empleados-roles.md`.

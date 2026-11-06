@@ -1,31 +1,76 @@
-const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
-const state={token:sessionStorage.getItem("s2r_token")||""};
-const notice=(message,error=false)=>{const out=$("#notice");out.textContent=message;out.className=error?"error":"";setTimeout(()=>{if(out.textContent===message)out.textContent=""},5000)};
-async function api(path,options={}){const headers={...(options.body instanceof FormData?{}:{"Content-Type":"application/json"}),...(options.headers||{})};if(state.token)headers.Authorization=`Bearer ${state.token}`;const response=await fetch(`/api/v1${path}`,{...options,headers});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.detail||data.error||`HTTP ${response.status}`);return data}
-function setToken(token){state.token=token||"";if(token)sessionStorage.setItem("s2r_token",token);else sessionStorage.removeItem("s2r_token");$("#session-state").textContent=token?"Sesión autenticada":"Sin sesión"}
-function formData(form){return Object.fromEntries(new FormData(form).entries())}
-function render(target,data){if(!Array.isArray(data)||!data.length){$(target).innerHTML=`<pre>${escapeHtml(JSON.stringify(data,null,2))}</pre>`;return}const keys=Object.keys(data[0]);$(target).innerHTML=`<table><thead><tr>${keys.map(k=>`<th>${escapeHtml(k)}</th>`).join("")}</tr></thead><tbody>${data.map(row=>`<tr>${keys.map(k=>`<td>${escapeHtml(format(row[k]))}</td>`).join("")}</tr>`).join("")}</tbody></table>`}
-function format(v){return typeof v==="object"&&v!==null?JSON.stringify(v):String(v??"")}
-function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
-async function loadCatalog(){const rows=await api("/catalogo");$("#catalog").innerHTML=rows.map(x=>`<article class="card"><span>${escapeHtml(x.categoria)}</span><strong>${escapeHtml(x.producto)}</strong><p>${escapeHtml(x.codigo)}</p><b>C$ ${escapeHtml(x.precio_detalle)}</b><small> · variante ${x.id_variante}</small></article>`).join("")}
-$$('[data-view]').forEach(b=>b.onclick=()=>{const employee=b.dataset.view==="empleado";$("#cliente-view").classList.toggle("hidden",employee);$("#empleado-view").classList.toggle("hidden",!employee)});
-$$('[data-auth]').forEach(b=>b.onclick=()=>{$$('[data-auth]').forEach(x=>x.classList.remove("active"));b.classList.add("active");["login","register","recover"].forEach(x=>$(`#${x}-form`).classList.toggle("hidden",x!==b.dataset.auth))});
-$("#logout").onclick=()=>setToken("");
-$("#login-form").onsubmit=async e=>{e.preventDefault();try{const data=await api("/auth/login",{method:"POST",body:JSON.stringify(formData(e.target))});setToken(data.access_token);notice("Sesión iniciada") }catch(x){notice(x.message,true)}};
-$("#register-form").onsubmit=async e=>{e.preventDefault();try{await api("/auth/registro",{method:"POST",body:JSON.stringify(formData(e.target))});notice("Cuenta creada. Confirme el correo antes de ingresar.")}catch(x){notice(x.message,true)}};
-$("#recover-form").onsubmit=async e=>{e.preventDefault();try{await api("/auth/completar-registro",{method:"POST",body:JSON.stringify(formData(e.target))});notice("Vínculo comercial completado") }catch(x){notice(x.message,true)}};
-$("#quote-form").onsubmit=async e=>{e.preventDefault();const x=formData(e.target);try{await api("/cotizaciones",{method:"POST",body:JSON.stringify({lines:[{variant_id:+x.variant,quantity:+x.quantity,customization:x.customization||null}],observations:null})});notice("Cotización creada") }catch(x){notice(x.message,true)}};
-$("#order-form").onsubmit=async e=>{e.preventDefault();const x=formData(e.target);try{await api("/pedidos",{method:"POST",body:JSON.stringify({lines:[{variant_id:+x.variant,quantity:+x.quantity,promotion_id:null}],delivery_mode:x.delivery})});notice("Pedido creado") }catch(x){notice(x.message,true)}};
-$("#payment-form").onsubmit=async e=>{e.preventDefault();const x=formData(e.target);try{await api(`/pagos/pedidos/${+x.order}/reportar`,{method:"POST",body:JSON.stringify({milestone_number:+x.milestone,idempotency_key:crypto.randomUUID(),method:x.method,bank:null,reference:x.reference||null})});notice("Pago reportado para revisión") }catch(x){notice(x.message,true)}};
-$("#client-quote-action").onsubmit=async e=>{e.preventDefault();const x=formData(e.target);try{const data=x.action==="CONVERTIR"?await api(`/cotizaciones/${+x.id}/convertir`,{method:"POST"}):await api(`/cotizaciones/${+x.id}/decision`,{method:"POST",body:JSON.stringify({decision:x.action,reason:x.reason})});render("#client-data",[data]);notice("Operación de cotización completada")}catch(x){notice(x.message,true)}};
-$("#client-order-action").onsubmit=async e=>{e.preventDefault();const x=formData(e.target);try{let data;if(x.action==="cancelar")data=await api(`/pedidos/${+x.id}/cancelar`,{method:"POST",body:JSON.stringify({reason:x.reason})});else if(x.action==="pagos")data=await api(`/pagos/pedidos/${+x.id}`);else data=await api(`/pedidos/${+x.id}/${x.action}`);render("#client-data",Array.isArray(data)?data:[data]);notice("Consulta completada")}catch(x){notice(x.message,true)}};
-$("#quote-decision-form").onsubmit=async e=>{e.preventDefault();const x=formData(e.target);try{await api(`/cotizaciones/${+x.id}/decision`,{method:"POST",body:JSON.stringify({decision:x.decision,reason:x.reason})});notice("Cotización actualizada")}catch(x){notice(x.message,true)}};
-$("#payment-decision-form").onsubmit=async e=>{e.preventDefault();const x=formData(e.target),reject=x.decision==="rechazar";try{await api(`/pagos/${+x.id}/${x.decision}`,{method:"POST",body:reject?JSON.stringify({reason:x.reason}):undefined});notice("Pago resuelto")}catch(x){notice(x.message,true)}};
-$("#transition-form").onsubmit=async e=>{e.preventDefault();const x=formData(e.target);try{await api(`/pedidos/${+x.id}/estado`,{method:"POST",body:JSON.stringify({target:x.target,reason:x.reason})});notice("Pedido actualizado")}catch(x){notice(x.message,true)}};
-$("#purchase-form").onsubmit=async e=>{e.preventDefault();const x=formData(e.target);try{const p=await api("/compras",{method:"POST",body:JSON.stringify({provider_id:+x.provider,document_number:x.document||null,lines:[{article_id:+x.article,quantity:x.quantity,unit_cost:x.cost}]})});notice(`Compra ${p.id_compra} creada en borrador; revísela antes de confirmarla.`)}catch(x){notice(x.message,true)}};
-$("#purchase-confirm-form").onsubmit=async e=>{e.preventDefault();const x=formData(e.target);try{const p=await api(`/compras/${+x.id}/confirmar`,{method:"POST"});render("#admin-data",[p]);notice("Compra confirmada; inventario actualizado") }catch(x){notice(x.message,true)}};
-$("#provider-form").onsubmit=async e=>{e.preventDefault();const x=formData(e.target);try{const p=await api("/compras/proveedores",{method:"POST",body:JSON.stringify({name:x.name,email:x.email||null,phone:x.phone||null,address:x.address||null})});render("#admin-data",[p]);notice("Proveedor registrado") }catch(x){notice(x.message,true)}};
-$("#loss-form").onsubmit=async e=>{e.preventDefault();const x=formData(e.target);try{const loss=await api("/perdidas",{method:"POST",body:JSON.stringify({moment:"FUERA_PRODUCCION",incident_type:"DANO_ALMACENAMIENTO",reason:x.reason,order_id:x.order?+x.order:null,stage_id:null,description:"Registrada desde la demostración"})});const confirmed=await api(`/perdidas/${loss.id_perdida}/confirmar`,{method:"POST",body:JSON.stringify({lines:[{article_id:+x.article,quantity:x.quantity,damage_description:x.reason}]})});render("#admin-data",[confirmed]);notice("Pérdida confirmada con movimiento de inventario") }catch(x){notice(x.message,true)}};
-const actions={catalog:loadCatalog,quotes:async()=>render("#client-data",await api("/cotizaciones")),orders:async()=>render("#client-data",await api("/pedidos")),"admin-products":async()=>render("#admin-data",await api("/catalogo")),"admin-orders":async()=>render("#admin-data",await api("/pedidos")),"admin-quotes":async()=>render("#admin-data",await api("/cotizaciones")),inventory:async()=>render("#admin-data",await api("/inventario/articulos")),purchases:async()=>render("#admin-data",await api("/compras")),providers:async()=>render("#admin-data",await api("/compras/proveedores")),losses:async()=>render("#admin-data",await api("/perdidas")),dashboard:async()=>render("#admin-data",[await api("/reportes/resumen")])};
-$$('[data-action]').forEach(b=>b.onclick=async()=>{try{await actions[b.dataset.action]()}catch(x){notice(x.message,true)}});
-setToken(state.token);loadCatalog().catch(x=>notice(x.message,true));
+const $ = (selector) => document.querySelector(selector);
+const tokenKey = "s2r_access_token";
+
+function token() { return sessionStorage.getItem(tokenKey) || ""; }
+function saveToken(value) { value ? sessionStorage.setItem(tokenKey, value) : sessionStorage.removeItem(tokenKey); }
+function message(text, error = false) {
+  const notice = $("#notice");
+  notice.textContent = text;
+  notice.className = error ? "error" : "";
+  setTimeout(() => { if (notice.textContent === text) notice.textContent = ""; }, 7000);
+}
+async function api(path, options = {}) {
+  const headers = { ...(options.body ? { "Content-Type": "application/json" } : {}), ...(options.headers || {}) };
+  if (token()) headers.Authorization = `Bearer ${token()}`;
+  let response;
+  try { response = await fetch(`/api/v1${path}`, { ...options, headers }); }
+  catch { throw new Error("No fue posible comunicarse con la API"); }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.detail || "La operación no pudo completarse");
+  return data;
+}
+const values = (form) => Object.fromEntries(new FormData(form).entries());
+const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+
+async function catalog() {
+  const rows = await api("/catalogo");
+  $("#catalog").innerHTML = rows.map((item) => `<article class="product-card"><span>${escapeHtml(item.categoria)}</span><h3>${escapeHtml(item.producto)}</h3><p>${escapeHtml(item.codigo)}</p><strong>C$ ${escapeHtml(item.precio_detalle)}</strong></article>`).join("");
+}
+
+async function identifyAndRedirect() {
+  try {
+    const me = await api("/auth/me");
+    location.assign(me.dashboard_inicial);
+    return;
+  } catch (firstError) {
+    try {
+      await api("/auth/activar-empleado", { method: "POST" });
+      const me = await api("/auth/me");
+      location.assign(me.dashboard_inicial);
+      return;
+    } catch {
+      $("#recovery").classList.remove("hidden");
+      message(`${firstError.message}. Si confirmaste tu correo, completa el vínculo.`, true);
+    }
+  }
+}
+
+$("#login-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    const result = await api("/auth/login", { method: "POST", body: JSON.stringify(values(event.target)) });
+    saveToken(result.access_token);
+    await identifyAndRedirect();
+  } catch (error) { message(error.message, true); }
+});
+
+$("#register-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    await api("/auth/registro", { method: "POST", body: JSON.stringify(values(event.target)) });
+    event.target.reset();
+    message("Cuenta de cliente creada. Revisa tu correo para confirmarla antes de iniciar sesión.");
+  } catch (error) { message(error.message, true); }
+});
+
+$("#recover-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    await api("/auth/completar-registro", { method: "POST", body: JSON.stringify(values(event.target)) });
+    await identifyAndRedirect();
+  } catch (error) { message(error.message, true); }
+});
+
+$("#refresh-catalog").addEventListener("click", () => catalog().catch((error) => message(error.message, true)));
+catalog().catch((error) => message(error.message, true));
+if (token()) identifyAndRedirect();
