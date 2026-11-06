@@ -27,6 +27,12 @@ class LoginRequest(StrictInput):
     password: SecretStr = Field(min_length=1, max_length=128)
 
 
+class RegistrationRecoveryRequest(StrictInput):
+    names: str = Field(min_length=1, max_length=120)
+    surnames: str | None = Field(default=None, max_length=120)
+    phone: str | None = Field(default=None, max_length=30)
+
+
 class GuestCreate(StrictInput):
     names: str = Field(min_length=1, max_length=120)
     phone: str | None = Field(default=None, max_length=30)

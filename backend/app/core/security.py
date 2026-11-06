@@ -12,7 +12,7 @@ from jwt import PyJWKClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import AuthenticationRequired
+from app.core.exceptions import AuthenticationRequired, DomainError
 from app.db.session import get_session
 from app.models.entities import Cliente, CuentaAcceso, Empleado
 
@@ -25,6 +25,17 @@ class Principal:
     @property
     def is_employee(self) -> bool:
         return self.origin == "EMPLEADO"
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedAuthIdentity:
+    subject: str
+    email: str
+
+
+class IdentityVerificationUnavailable(DomainError):
+    status_code = 503
+    code = "identity_verification_unavailable"
 
 
 class AuthenticationProvider(Protocol):
@@ -67,18 +78,8 @@ class SupabaseAuthenticationProvider:
     def __init__(self, verifier: TokenVerifier):
         self.verifier = verifier
 
-    @staticmethod
-    def _bearer(request: Request) -> str | None:
-        value = request.headers.get("authorization")
-        if not value:
-            return None
-        scheme, separator, token = value.partition(" ")
-        if scheme.lower() != "bearer" or not separator or not token.strip():
-            raise AuthenticationRequired("Encabezado Authorization inválido")
-        return token.strip()
-
     def authenticate(self, request: Request, session: Session) -> Principal | None:
-        token = self._bearer(request)
+        token = bearer_token(request)
         if token is None:
             return None
         try:
@@ -161,6 +162,41 @@ class UnconfiguredAuthenticationProvider:
 
     def authenticate(self, request: Request, session: Session) -> None:
         return None
+
+
+def bearer_token(request: Request) -> str | None:
+    value = request.headers.get("authorization")
+    if not value:
+        return None
+    scheme, separator, token = value.partition(" ")
+    if scheme.lower() != "bearer" or not separator or not token.strip():
+        raise AuthenticationRequired("Encabezado Authorization inválido")
+    return token.strip()
+
+
+def get_verified_auth_identity(request: Request) -> VerifiedAuthIdentity:
+    verifier: TokenVerifier | None = getattr(request.app.state, "token_verifier", None)
+    if verifier is None:
+        raise IdentityVerificationUnavailable(
+            "La verificación de identidades Supabase no está configurada"
+        )
+    token = bearer_token(request)
+    if token is None:
+        raise AuthenticationRequired("Se requiere una sesión Supabase verificada")
+    try:
+        claims = verifier.verify(token)
+    except jwt.PyJWTError as exc:
+        raise AuthenticationRequired("Token de acceso inválido o vencido") from exc
+    try:
+        subject = str(UUID(str(claims.get("sub", ""))))
+    except ValueError as exc:
+        raise AuthenticationRequired("Token sin sujeto verificable") from exc
+    email = claims.get("email")
+    if not isinstance(email, str) or not email.strip() or "@" not in email:
+        raise AuthenticationRequired("La sesión no contiene un correo verificable")
+    if claims.get("is_anonymous") is True:
+        raise AuthenticationRequired("Una sesión anónima no puede completar este vínculo")
+    return VerifiedAuthIdentity(subject=subject, email=email.strip().lower())
 
 
 def get_principal(request: Request, session: Session = Depends(get_session)) -> Principal:

@@ -84,10 +84,22 @@ Storage desde el servidor; no se usa como sustituto de la identidad del usuario.
 El registro llama a Supabase Auth con correo y contraseña y después crea, en una
 sola transacción local, `persona`, `cliente` de tipo `REGISTRADO` y
 `cuenta_acceso`. El UUID de Auth se almacena únicamente en
-`cuenta_acceso.identificador_autenticacion`. Si el commit local falla, el
-coordinador elimina el usuario Auth recién creado con la clave privada. Si la
-compensación también falla se devuelve un error operativo explícito para
-intervención; no se presenta un registro parcial como exitoso.
+`cuenta_acceso.identificador_autenticacion`.
+
+GoTrue puede responder el Signup con el usuario en la raíz cuando el correo queda
+pendiente de confirmación, o dentro de `user` cuando devuelve una sesión. Ambos
+formatos se validan. Una respuesta saneada de un correo confirmado que ya existe
+contiene un UUID ficticio e `identities=[]`; se rechaza y nunca se interpreta
+como una identidad nueva.
+
+Signup no permite distinguir con certeza un usuario pendiente recién creado de
+uno pendiente que ya existía. Por esa razón, si el commit comercial falla no se
+elimina ningún usuario Auth automáticamente. Después de confirmar el correo e
+iniciar sesión, el usuario puede llamar a `POST /api/v1/auth/completar-registro`
+con su JWT. El backend verifica firma, proyecto, audiencia, expiración, `sub` y
+correo, y crea el vínculo que falta. Los reintentos con el mismo `sub` devuelven
+el vínculo existente. Si el correo ya pertenece a otra `persona`, se detiene para
+revisión administrativa; nunca se fusionan perfiles por conocer un correo.
 
 Supabase debe mantener habilitada la confirmación por correo. La respuesta del
 registro indica `email_verification_required=true`; la URL final de redirección
@@ -106,6 +118,11 @@ Cada petición protegida sigue este orden:
 No se hace decode-only. No se aceptan roles, precios, propietarios ni permisos de
 claims personalizados o metadatos del navegador. Un token de otro proyecto no
 supera la comprobación del emisor.
+
+Las claves modernas `sb_publishable_*` y `sb_secret_*` se envían únicamente en
+el encabezado `apikey`. No son JWT y no se usan como `Authorization: Bearer`.
+Ese encabezado queda reservado para el access token del usuario; sólo una clave
+`service_role` JWT heredada conserva el bearer requerido por APIs de servidor.
 
 Los invitados no crean un usuario Supabase. `POST /api/v1/auth/invitado` crea la
 persona y cliente persistentes y emite una cookie cifrada y autenticada con
@@ -166,7 +183,7 @@ públicos. En ejecución se inyectan por el gestor de secretos:
 
 - `DATABASE_URL`, modo de conexión y `DATABASE_SSLMODE`;
 - `SUPABASE_PUBLIC_KEY` para Auth público;
-- `SUPABASE_SECRET_KEY` sólo en el backend para compensación y Storage;
+- `SUPABASE_SECRET_KEY` sólo en el backend para Storage;
 - `GUEST_COOKIE_SECRET`, independiente y aleatorio.
 
 La rotación consiste en crear una clave nueva, actualizar el secreto del entorno,
@@ -221,6 +238,9 @@ comparte esa salida y no se ejecuta ningún otro comando.
    correo y usar `POST /api/v1/auth/login`. Enviar el `access_token` como
    `Authorization: Bearer <token>` a `/api/v1/clientes/me`. No copiar el token a
    Git, documentación o capturas.
+   Si Auth ya contiene el usuario pero falta CUENTA_ACCESO, enviar ese mismo JWT
+   a `POST /api/v1/auth/completar-registro` con nombres, apellidos y teléfono. El
+   correo no se acepta en el body: procede de la identidad firmada.
 10. Subir un diseño con multipart a
     `/api/v1/disenos/pedidos/{pedido}/lineas/{linea}/versiones` y solicitar su
     endpoint `/archivo`; la respuesta debe ser temporal. Repetir con el
@@ -251,7 +271,7 @@ El navegador nunca decide que una cuenta es empleada o administradora.
 | 409 al subir | revisar MIME real, extensión, tamaño, propiedad y si ya existe comprobante |
 | URL firmada devuelve acceso denegado | confirmar bucket privado, ruta persistida y vigencia de 300 segundos |
 | dry-run propone cambios inesperados | no aplicar; comparar historial remoto con los cinco archivos locales |
-| registro Auth sin perfil local | revisar el error de compensación y resolver el usuario huérfano antes de reintentar |
+| registro Auth sin perfil local | confirmar correo, iniciar sesión y usar `/auth/completar-registro`; si el correo comercial ya existe, revisión administrativa |
 
 ## Operación pendiente y rollback
 
