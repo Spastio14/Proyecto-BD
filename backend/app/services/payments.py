@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import Conflict, NotFound, PermissionDenied
@@ -30,6 +30,10 @@ class PaymentService:
         bank: str | None = None,
         reference: str | None = None,
     ) -> Transaccion:
+        session.execute(
+            text("select pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+            {"key": f"payment-idempotency:{idempotency_key}"},
+        )
         existing = session.scalar(
             select(Transaccion).where(Transaccion.clave_idem == idempotency_key)
         )

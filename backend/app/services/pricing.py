@@ -35,6 +35,7 @@ class PricingService:
         session: Session,
         *,
         client_type: str,
+        commercial_condition: str = "DETALLE",
         variant_id: int,
         quantity: int,
         promotion_id: int | None = None,
@@ -54,7 +55,7 @@ class PricingService:
         unit_price = money(variant.precio_detalle)
         mode = "DETALLE"
         scale = None
-        if client_type in self.WHOLESALE_CLIENT_TYPES:
+        if client_type in self.WHOLESALE_CLIENT_TYPES and commercial_condition == "MAYORISTA":
             scale = session.scalar(
                 select(EscalaPrecio).where(
                     EscalaPrecio.id_variante == variant_id,

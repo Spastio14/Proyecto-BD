@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import Conflict
 from app.core.security import Principal
 from app.models.entities import (
-    AprobacionDiseno,
     DetallePedido,
     HitoPago,
     VarianteProducto,
@@ -39,15 +38,8 @@ class ProductionService:
             )
             if latest is None:
                 raise Conflict(f"La línea {line_number} no tiene diseño")
-            approved = session.scalar(
-                select(AprobacionDiseno.id_aprobacion).where(
-                    AprobacionDiseno.id_pedido == order_id,
-                    AprobacionDiseno.numero_linea == line_number,
-                    AprobacionDiseno.numero_version == latest,
-                    AprobacionDiseno.tipo_decision == "APROBADO",
-                )
-            )
-            if approved is None:
+            current_version = session.get(VersionDiseno, (order_id, line_number, latest))
+            if current_version is None or not current_version.es_aprobado:
                 raise Conflict(f"La versión vigente de la línea {line_number} no está aprobada")
         return OrderService().transition(
             session,

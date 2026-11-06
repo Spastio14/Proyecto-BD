@@ -19,6 +19,7 @@ from app.models.entities import (
 from app.repositories.locks import lock_client
 from app.services.audit import AuditService
 from app.services.authorization import AuthorizationService
+from app.services.orders import OrderService
 from app.services.pricing import PricingService
 
 
@@ -48,6 +49,7 @@ class QuotationService:
             self.pricing.price_line(
                 session,
                 client_type=client.tipo_cliente,
+                commercial_condition=client.condicion_comercial,
                 variant_id=line.variant_id,
                 quantity=line.quantity,
             )
@@ -102,13 +104,18 @@ class QuotationService:
             raise Conflict("La cotización no está aceptada y vigente")
         if session.scalar(select(Pedido.id_pedido).where(Pedido.id_cotizacion == quote_id)):
             raise Conflict("La cotización ya fue convertida")
-        lock_client(session, quote.id_cliente)
+        client = lock_client(session, quote.id_cliente)
         details = list(
             session.scalars(
                 select(DetalleCotizacion)
                 .where(DetalleCotizacion.id_cotizacion == quote_id)
                 .order_by(DetalleCotizacion.numero_linea)
             )
+        )
+        OrderService.enforce_client_limits(
+            session,
+            client=client,
+            total_units=sum(detail.cantidad for detail in details),
         )
         now = datetime.now(UTC)
         order = Pedido(

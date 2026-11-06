@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import Conflict, NotFound, PermissionDenied
 from app.core.security import Principal
 from app.models.entities import AprobacionDiseno, DetallePedido, Pedido, VersionDiseno
+from app.repositories.locks import lock_order
 from app.services.audit import AuditService
 from app.services.authorization import AuthorizationService
 
@@ -22,9 +23,9 @@ class DesignService:
         principal: Principal,
         observations: str | None = None,
     ) -> VersionDiseno:
-        order = session.get(Pedido, order_id)
+        order = lock_order(session, order_id)
         detail = session.get(DetallePedido, (order_id, line_number))
-        if order is None or detail is None:
+        if detail is None:
             raise NotFound("Pedido o línea no encontrada")
         if principal.is_employee:
             AuthorizationService.require(session, principal, "DISENO_APROBAR")

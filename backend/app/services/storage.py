@@ -1,6 +1,7 @@
 from pathlib import Path
 from uuid import uuid4
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.exceptions import Conflict, NotFound, PermissionDenied
@@ -118,7 +119,11 @@ class StorageCoordinator:
         )
         try:
             with self.factory() as session, session.begin():
-                payment = session.get(Transaccion, payment_id)
+                payment = session.scalar(
+                    select(Transaccion)
+                    .where(Transaccion.id_transaccion == payment_id)
+                    .with_for_update()
+                )
                 if payment is None or payment.tipo_transaccion != "PAGO":
                     raise NotFound("Transacción de pago no encontrada")
                 self._authorize_order(session, payment.id_pedido, principal, "PAGO_VERIFICAR")
