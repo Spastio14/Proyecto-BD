@@ -50,7 +50,7 @@ docker exec -i s2r-demo psql -U postgres -d sublimacion2r \
 docker exec -i s2r-demo psql -U postgres -d sublimacion2r \
   -v ON_ERROR_STOP=1 < database/seeds/002_fase_4_1_demo.sql
 docker exec -i s2r-demo psql -U postgres -d sublimacion2r \
-  -v ON_ERROR_STOP=1 < backend/tests/fixtures_permissions.sql
+  -v ON_ERROR_STOP=1 < database/seeds/003_roles_permisos_fase_4_2.sql
 ```
 
 Comprobar el punto de partida aislado: 20 unidades.

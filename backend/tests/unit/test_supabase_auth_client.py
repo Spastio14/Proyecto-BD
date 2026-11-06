@@ -5,7 +5,12 @@ import pytest
 
 from app.core.exceptions import Conflict
 from app.integrations.supabase import (
+    AuthEmailNotConfirmed,
+    AuthEmailRejected,
     AuthIdentityAlreadyExists,
+    AuthPasswordRejected,
+    AuthRateLimited,
+    AuthSignupDisabled,
     ExternalServiceUnavailable,
     SupabaseHTTPClient,
 )
@@ -95,7 +100,49 @@ def test_signup_maps_supabase_existing_user_error_to_conflict(monkeypatch):
         "post",
         lambda *args, **kwargs: response(422, {"code": "user_already_exists"}),
     )
-    with pytest.raises(Conflict, match="rechazó"):
+    with pytest.raises(AuthIdentityAlreadyExists, match="inicia sesión"):
+        client().sign_up(email="cliente@example.test", password="password")
+
+
+@pytest.mark.parametrize(
+    ("status_code", "code", "expected"),
+    [
+        (422, "weak_password", AuthPasswordRejected),
+        (403, "signup_disabled", AuthSignupDisabled),
+        (422, "email_address_not_authorized", AuthEmailRejected),
+        (429, "over_email_send_rate_limit", AuthRateLimited),
+        (429, "over_request_rate_limit", AuthRateLimited),
+        (403, "email_not_confirmed", AuthEmailNotConfirmed),
+    ],
+)
+def test_auth_official_error_codes_have_specific_safe_diagnostics(
+    monkeypatch, status_code, code, expected
+):
+    monkeypatch.setattr(
+        httpx,
+        "post",
+        lambda *args, **kwargs: response(status_code, {"error_code": code}),
+    )
+    with pytest.raises(expected):
+        client().sign_up(email="cliente@example.test", password="password")
+
+
+def test_signup_network_error_is_service_unavailable(monkeypatch):
+    def fail(*args, **kwargs):
+        raise httpx.ConnectError("unavailable", request=httpx.Request("POST", "https://x"))
+
+    monkeypatch.setattr(httpx, "post", fail)
+    with pytest.raises(ExternalServiceUnavailable, match="temporalmente"):
+        client().sign_up(email="cliente@example.test", password="password")
+
+
+def test_signup_unexpected_error_payload_remains_safe(monkeypatch):
+    monkeypatch.setattr(
+        httpx,
+        "post",
+        lambda *args, **kwargs: response(400, ["respuesta", "no", "compatible"]),
+    )
+    with pytest.raises(Conflict, match="revisa los datos"):
         client().sign_up(email="cliente@example.test", password="password")
 
 
@@ -140,3 +187,22 @@ def test_signup_returns_canonical_uuid(monkeypatch):
     )
     result = client().sign_up(email="cliente@example.test", password="password")
     assert UUID(result) == expected
+
+
+def test_employee_invitation_accepts_root_user_and_uses_server_headers(monkeypatch):
+    expected = uuid4()
+    captured = {}
+
+    def fake_post(*args, **kwargs):
+        captured["url"] = args[0]
+        captured.update(kwargs)
+        return response(200, auth_user(user_id=expected, email="empleado@example.test"))
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = client().invite_user(
+        email="empleado@example.test",
+        redirect_to="http://127.0.0.1:8000/app/activar-empleado/",
+    )
+    assert result == str(expected)
+    assert captured["headers"] == {"apikey": "sb_secret_example"}
+    assert "redirect_to=" in captured["url"]
