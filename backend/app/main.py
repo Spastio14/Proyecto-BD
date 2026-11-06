@@ -1,6 +1,9 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.engine import Engine
 
 from app.api.router import api_router
@@ -38,7 +41,7 @@ def create_app(
 
     application = FastAPI(
         title="Sublimación Doble R API",
-        version="2.0.0",
+        version="4.1.0",
         lifespan=lifespan,
     )
     application.state.engine = database_engine
@@ -97,6 +100,14 @@ def create_app(
         else UnconfiguredAuthenticationProvider()
     )
     application.include_router(api_router)
+    frontend = Path(__file__).resolve().parents[2] / "frontend"
+    if frontend.is_dir():
+        application.mount("/app", StaticFiles(directory=frontend, html=True), name="frontend")
+        application.add_api_route(
+            "/",
+            lambda: RedirectResponse(url="/app/", status_code=307),
+            include_in_schema=False,
+        )
     install_exception_handlers(application)
     return application
 
