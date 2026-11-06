@@ -161,3 +161,26 @@ class InventoryService:
             )
         )
         return Decimal(article.existencia_actual) - Decimal(reserved or 0)
+
+    @classmethod
+    def list_with_availability(
+        cls, session: Session, principal: Principal
+    ) -> list[dict[str, object]]:
+        AuthorizationService.require(session, principal, "INVENTARIO_GESTIONAR")
+        articles = list(
+            session.scalars(
+                select(ArticuloInventariable).order_by(ArticuloInventariable.nombre)
+            )
+        )
+        return [
+            {
+                "id_articulo": article.id_articulo,
+                "codigo": article.codigo,
+                "nombre": article.nombre,
+                "existencia_actual": article.existencia_actual,
+                "existencia_minima": article.existencia_minima,
+                "disponible": cls.availability(session, article.id_articulo),
+                "estado": article.estado,
+            }
+            for article in articles
+        ]

@@ -201,6 +201,52 @@ class OrderService:
             statement = statement.where(Pedido.id_cliente == principal.persona_id)
         return list(session.scalars(statement))
 
+    @classmethod
+    def details_owned(
+        cls, session: Session, *, order_id: int, principal: Principal
+    ) -> list[DetallePedido]:
+        cls.get_owned(session, order_id=order_id, principal=principal)
+        return list(
+            session.scalars(
+                select(DetallePedido)
+                .where(DetallePedido.id_pedido == order_id)
+                .order_by(DetallePedido.numero_linea)
+            )
+        )
+
+    @classmethod
+    def history_owned(
+        cls, session: Session, *, order_id: int, principal: Principal
+    ) -> list[HistorialPedido]:
+        cls.get_owned(session, order_id=order_id, principal=principal)
+        return list(
+            session.scalars(
+                select(HistorialPedido)
+                .where(HistorialPedido.id_pedido == order_id)
+                .order_by(HistorialPedido.fecha_hora)
+            )
+        )
+
+    def transition_authorized(
+        self,
+        session: Session,
+        *,
+        order_id: int,
+        target: str,
+        principal: Principal,
+        reason: str,
+    ) -> Pedido:
+        AuthorizationService.require(session, principal, "PEDIDO_GESTIONAR")
+        if target not in {"EN_DISENO", "LISTO"}:
+            raise Conflict("El estado requiere una operación específica")
+        return self.transition(
+            session,
+            order_id=order_id,
+            target=target,
+            principal=principal,
+            reason=reason,
+        )
+
     def transition(
         self,
         session: Session,

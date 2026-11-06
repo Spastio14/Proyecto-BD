@@ -57,6 +57,17 @@ done
 apply_file s2r_rebuild_1 "$repo_dir/database/seeds/001_demo.sql"
 apply_file s2r_rebuild_1 "$repo_dir/database/tests/001_schema_integrity.sql"
 
+# Valida por separado los datos y consultas opcionales de la demostración 4.1.
+apply_file s2r_rebuild_2 "$repo_dir/database/seeds/001_demo.sql"
+apply_file s2r_rebuild_2 "$repo_dir/database/seeds/002_fase_4_1_demo.sql"
+apply_file s2r_rebuild_2 "$repo_dir/database/queries/fase_4_1_reportes.sql" >/dev/null
+apply_file s2r_rebuild_2 "$repo_dir/database/queries/fase_4_1_crud_demo.sql" >/dev/null
+demo_stock="$(docker exec "$container_name" psql --username postgres \
+    --dbname s2r_rebuild_2 --quiet --tuples-only --no-align \
+    --command "select existencia_actual from public.articulo_inventariable
+      where id_articulo = 4101;")"
+test "$demo_stock" = "20.000"
+
 catalog_rows="$(docker exec "$container_name" psql --username postgres \
     --dbname s2r_rebuild_1 --quiet --tuples-only --no-align \
     --command "set role anon; select concat_ws('|',

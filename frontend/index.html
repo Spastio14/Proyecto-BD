@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Sublimación Doble R</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div><strong>Doble R</strong><span>Sistema de demostración</span></div>
+    <nav><button data-view="cliente">Cliente</button><button data-view="empleado">Empleado</button></nav>
+  </header>
+  <main>
+    <section class="hero">
+      <div><p class="eyebrow">Sublimación personalizada</p><h1>Pedidos claros, inventario verificable.</h1><p>Esta interfaz consume la API y muestra datos reales de PostgreSQL.</p></div>
+      <div class="session"><span id="session-state">Sin sesión</span><button id="logout" class="ghost">Cerrar sesión</button></div>
+    </section>
+
+    <section class="panel" id="auth-panel">
+      <div class="tabs"><button data-auth="login" class="active">Ingresar</button><button data-auth="register">Crear cuenta</button><button data-auth="recover">Completar vínculo</button></div>
+      <form id="login-form" class="grid compact">
+        <label>Correo<input name="email" type="email" required></label><label>Contraseña<input name="password" type="password" required></label><button>Ingresar</button>
+      </form>
+      <form id="register-form" class="grid compact hidden">
+        <label>Nombres<input name="names" required></label><label>Apellidos<input name="surnames"></label><label>Correo<input name="email" type="email" required></label><label>Teléfono<input name="phone"></label><label>Contraseña<input name="password" type="password" minlength="8" required></label><button>Registrarme</button>
+      </form>
+      <form id="recover-form" class="grid compact hidden">
+        <p>Use esta opción después de iniciar sesión y verificar el correo en Supabase.</p><label>Nombres<input name="names" required></label><label>Apellidos<input name="surnames"></label><label>Teléfono<input name="phone"></label><button>Completar vínculo verificado</button>
+      </form>
+    </section>
+
+    <section id="cliente-view">
+      <div class="section-title"><div><p class="eyebrow">Portal cliente</p><h2>Catálogo y pedidos</h2></div><button data-action="catalog">Actualizar catálogo</button></div>
+      <div id="catalog" class="cards"></div>
+      <div class="two-columns">
+        <article class="panel"><h3>Nueva cotización</h3><form id="quote-form" class="grid"><label>Variante<input name="variant" type="number" min="1" required></label><label>Cantidad<input name="quantity" type="number" min="1" required></label><label>Personalización<textarea name="customization"></textarea></label><button>Solicitar</button></form></article>
+        <article class="panel"><h3>Nuevo pedido</h3><form id="order-form" class="grid"><label>Variante<input name="variant" type="number" min="1" required></label><label>Cantidad<input name="quantity" type="number" min="1" required></label><label>Entrega<select name="delivery"><option>RETIRO</option><option>ENVIO</option></select></label><button>Crear pedido</button></form></article>
+      </div>
+      <div class="section-title"><h2>Mis operaciones</h2><div><button data-action="quotes">Cotizaciones</button><button data-action="orders">Pedidos</button></div></div>
+      <div id="client-data" class="table-wrap"></div>
+      <div class="two-columns">
+        <article class="panel"><h3>Resolver cotización</h3><form id="client-quote-action" class="grid compact"><label>ID cotización<input name="id" type="number" min="1" required></label><label>Acción<select name="action"><option value="ACEPTADA">Aceptar</option><option value="RECHAZADA">Rechazar</option><option value="CONVERTIR">Convertir aceptada</option></select></label><label>Motivo<input name="reason" value="Decisión del cliente"></label><button>Ejecutar</button></form></article>
+        <article class="panel"><h3>Consultar o cancelar pedido</h3><form id="client-order-action" class="grid compact"><label>ID pedido<input name="id" type="number" min="1" required></label><label>Acción<select name="action"><option value="detalles">Detalles</option><option value="historial">Historial</option><option value="pagos">Pagos</option><option value="cancelar">Cancelar</option></select></label><label>Motivo<input name="reason" value="Solicitud del cliente"></label><button>Ejecutar</button></form></article>
+      </div>
+      <article class="panel"><h3>Reportar pago</h3><form id="payment-form" class="grid compact"><label>Pedido<input name="order" type="number" min="1" required></label><label>Hito<input name="milestone" type="number" value="1" min="1" required></label><label>Método<select name="method"><option>TRANSFERENCIA</option><option>EFECTIVO</option><option>TARJETA</option><option>OTRO</option></select></label><label>Referencia<input name="reference"></label><button>Reportar con clave idempotente</button></form></article>
+    </section>
+
+    <section id="empleado-view" class="hidden">
+      <div class="section-title"><div><p class="eyebrow">Panel empleado</p><h2>Operación y control</h2></div><button data-action="dashboard">Resumen</button></div>
+      <div class="action-grid">
+        <button data-action="admin-products">Productos</button><button data-action="admin-orders">Pedidos</button><button data-action="admin-quotes">Cotizaciones</button><button data-action="inventory">Inventario</button><button data-action="purchases">Compras</button><button data-action="providers">Proveedores</button><button data-action="losses">Pérdidas</button>
+      </div>
+      <div id="admin-data" class="table-wrap"></div>
+      <div class="two-columns">
+        <article class="panel"><h3>Decidir cotización</h3><form id="quote-decision-form" class="grid compact"><label>ID<input name="id" type="number" min="1" required></label><label>Decisión<select name="decision"><option>ACEPTADA</option><option>RECHAZADA</option></select></label><label>Motivo<input name="reason" required></label><button>Guardar</button></form></article>
+        <article class="panel"><h3>Resolver pago</h3><form id="payment-decision-form" class="grid compact"><label>ID pago<input name="id" type="number" min="1" required></label><label>Decisión<select name="decision"><option>confirmar</option><option>rechazar</option></select></label><label>Motivo rechazo<input name="reason" value="Comprobante no válido"></label><button>Guardar</button></form></article>
+        <article class="panel"><h3>Cambiar pedido</h3><form id="transition-form" class="grid compact"><label>ID pedido<input name="id" type="number" min="1" required></label><label>Estado<select name="target"><option>EN_DISENO</option><option>LISTO</option></select></label><label>Motivo<input name="reason" required></label><button>Aplicar transición</button></form></article>
+        <article class="panel"><h3>Registrar compra</h3><form id="purchase-form" class="grid compact"><label>Proveedor<input name="provider" type="number" min="1" required></label><label>Artículo<input name="article" type="number" min="1" required></label><label>Cantidad<input name="quantity" type="number" min="0.001" step="0.001" required></label><label>Costo unitario<input name="cost" type="number" min="0" step="0.01" required></label><label>Documento<input name="document"></label><button>Crear borrador</button></form></article>
+        <article class="panel"><h3>Confirmar compra revisada</h3><form id="purchase-confirm-form" class="grid compact"><label>ID compra<input name="id" type="number" min="1" required></label><button>Confirmar entrada una vez</button></form></article>
+        <article class="panel"><h3>Nuevo proveedor</h3><form id="provider-form" class="grid compact"><label>Nombre<input name="name" required></label><label>Correo<input name="email" type="email"></label><label>Teléfono<input name="phone"></label><label>Dirección<input name="address"></label><button>Registrar</button></form></article>
+        <article class="panel"><h3>Registrar pérdida</h3><form id="loss-form" class="grid compact"><label>Artículo<input name="article" type="number" min="1" required></label><label>Cantidad<input name="quantity" type="number" min="0.001" step="0.001" required></label><label>Motivo<input name="reason" required></label><label>Pedido opcional<input name="order" type="number" min="1"></label><button>Reportar y confirmar</button></form></article>
+      </div>
+    </section>
+    <output id="notice" aria-live="polite"></output>
+  </main>
+  <script src="app.js" defer></script>
+</body>
+</html>

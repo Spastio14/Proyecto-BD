@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.api.routes.designs import StorageRouteUnavailable
 from app.core.security import Principal, get_principal
 from app.db.session import get_session
-from app.schemas.api import PaymentRead, PaymentReport
+from app.schemas.api import PaymentRead, PaymentReject, PaymentReport
 from app.services.payments import PaymentService
 
 router = APIRouter(prefix="/pagos", tags=["pagos"])
@@ -38,6 +38,43 @@ def confirm_payment(
     session: Session = Depends(get_session),
 ):
     return PaymentService().confirm(session, payment_id=payment_id, principal=principal)
+
+
+@router.post("/{payment_id}/rechazar", response_model=PaymentRead)
+def reject_payment(
+    payment_id: int,
+    payload: PaymentReject,
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+):
+    return PaymentService().reject(
+        session,
+        payment_id=payment_id,
+        principal=principal,
+        reason=payload.reason,
+    )
+
+
+@router.get("/pedidos/{order_id}", response_model=list[PaymentRead])
+def list_order_payments(
+    order_id: int,
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+):
+    return PaymentService.list_for_order(
+        session, order_id=order_id, principal=principal
+    )
+
+
+@router.get("/{payment_id}", response_model=PaymentRead)
+def get_payment(
+    payment_id: int,
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+):
+    return PaymentService.get_owned(
+        session, payment_id=payment_id, principal=principal
+    )
 
 
 @router.post("/{payment_id}/comprobante", status_code=status.HTTP_201_CREATED)

@@ -138,3 +138,8 @@ class LossService:
         )
         session.flush()
         return loss
+
+    @staticmethod
+    def list_all(session: Session, principal: Principal) -> list[Perdida]:
+        AuthorizationService.require(session, principal, "PERDIDA_REGISTRAR")
+        return list(session.scalars(select(Perdida).order_by(Perdida.fecha_hora.desc())))
