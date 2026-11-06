@@ -17,6 +17,24 @@ class AuthenticationRequired(DomainError):
     code = "authentication_required"
 
 
+class TokenExpired(AuthenticationRequired):
+    code = "token_expired"
+
+
+class TokenInvalid(AuthenticationRequired):
+    code = "token_invalid"
+
+
+class AccountLinkMissing(DomainError):
+    status_code = 404
+    code = "account_link_missing"
+
+
+class AccountInactive(DomainError):
+    status_code = 403
+    code = "account_inactive"
+
+
 class PermissionDenied(DomainError):
     status_code = 403
     code = "permission_denied"

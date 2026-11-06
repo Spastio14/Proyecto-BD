@@ -2,12 +2,15 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import sessionmaker
 
+from app.core.config import Settings
 from app.core.exceptions import Conflict
 from app.core.security import Principal, SupabaseAuthenticationProvider, VerifiedAuthIdentity
 from app.integrations.supabase import AuthAdminIdentity, AuthRateLimited
+from app.main import create_app
 from app.models.entities import (
     AsignacionRol,
     Cliente,
@@ -28,12 +31,16 @@ class InviteGateway:
         self.subject = subject or str(uuid4())
         self.failure = failure
         self.calls: list[tuple[str, str | None]] = []
+        self.password_calls: list[tuple[str, str]] = []
 
     def invite_user(self, *, email: str, redirect_to: str | None = None) -> str:
         self.calls.append((email, redirect_to))
         if self.failure:
             raise self.failure
         return self.subject
+
+    def update_password(self, *, access_token: str, password: str) -> None:
+        self.password_calls.append((access_token, password))
 
 
 def role_id(session, name: str) -> int:
@@ -97,23 +104,19 @@ def test_122_auth_me_uses_database_roles_and_permissions(api_client_factory, emp
     assert "ADMINISTRACION" in response.json()["roles"]
 
 
-def test_123_accountant_is_read_only_for_finance_and_purchases(
-    session, api_client_factory
-):
+def test_123_accountant_is_read_only_for_finance_and_purchases(session, api_client_factory):
     accountant = add_employee(session, "CONTADOR")
     session.commit()
     client = api_client_factory(accountant)
     assert client.get("/api/v1/reportes/resumen").status_code == 200
     assert client.get("/api/v1/compras").status_code == 200
-    assert client.post(
-        "/api/v1/compras/proveedores", json={"name": "No permitido"}
-    ).status_code == 403
+    assert (
+        client.post("/api/v1/compras/proveedores", json={"name": "No permitido"}).status_code == 403
+    )
     assert client.get("/api/v1/empleados").status_code == 403
 
 
-def test_124_seller_cannot_see_financial_reports_or_purchases(
-    session, api_client_factory
-):
+def test_124_seller_cannot_see_financial_reports_or_purchases(session, api_client_factory):
     seller = add_employee(session, "VENDEDOR")
     session.commit()
     client = api_client_factory(seller)
@@ -123,9 +126,7 @@ def test_124_seller_cannot_see_financial_reports_or_purchases(
     assert client.get("/api/v1/compras").status_code == 403
 
 
-def test_125_admin_invites_and_employee_activates_verified_identity(
-    engine, session, employee
-):
+def test_125_admin_invites_and_employee_activates_verified_identity(engine, session, employee):
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     subject = str(uuid4())
     gateway = InviteGateway(subject=subject)
@@ -148,17 +149,20 @@ def test_125_admin_invites_and_employee_activates_verified_identity(
     with factory() as verification:
         invited = verification.get(Empleado, result.persona_id)
         assert invited.estado_laboral == "INACTIVO"
-        assert verification.scalar(
-            select(CuentaAcceso.identificador_autenticacion).where(
-                CuentaAcceso.id_persona == result.persona_id
+        assert (
+            verification.scalar(
+                select(CuentaAcceso.identificador_autenticacion).where(
+                    CuentaAcceso.id_persona == result.persona_id
+                )
             )
-        ) == subject
+            == subject
+        )
     activated = coordinator.activate(VerifiedAuthIdentity(subject=subject, email=email))
     assert activated.status == "ACTIVO"
     with factory() as verification:
-        principal = SupabaseAuthenticationProvider(
-            FakeVerifier({"sub": subject})
-        ).authenticate(request(bearer="verified"), verification)
+        principal = SupabaseAuthenticationProvider(FakeVerifier({"sub": subject})).authenticate(
+            request(bearer="verified"), verification
+        )
         profile = AuthorizationService.identity(verification, principal)
         assert profile["dashboard_inicial"] == "/app/ventas/"
         assert "PEDIDO_GESTIONAR" in profile["permisos"]
@@ -188,11 +192,14 @@ def test_126_failed_invitation_remains_recoverable_only_by_verified_identity(
             select(Persona.id_persona).where(Persona.correo_electronico == email)
         )
         assert verification.get(Empleado, person_id).estado_laboral == "INACTIVO"
-        assert verification.scalar(
-            select(func.count()).select_from(CuentaAcceso).where(
-                CuentaAcceso.id_persona == person_id
+        assert (
+            verification.scalar(
+                select(func.count())
+                .select_from(CuentaAcceso)
+                .where(CuentaAcceso.id_persona == person_id)
             )
-        ) == 0
+            == 0
+        )
     subject = str(uuid4())
     result = coordinator.activate(VerifiedAuthIdentity(subject=subject, email=email))
     assert result.status == "ACTIVO"
@@ -230,9 +237,7 @@ def test_128_role_change_replaces_effective_permissions(session, employee):
         principal=employee,
     )
     session.flush()
-    assert AuthorizationService.has_permission(
-        session, target, "REPORTE_FINANCIERO_CONSULTAR"
-    )
+    assert AuthorizationService.has_permission(session, target, "REPORTE_FINANCIERO_CONSULTAR")
     assert not AuthorizationService.has_permission(session, target, "PEDIDO_GESTIONAR")
 
 
@@ -307,9 +312,7 @@ def test_131_bootstrap_admin_is_verified_and_idempotent(engine):
     assert second.persona_id == first.persona_id
     with factory() as verification:
         principal = Principal(first.persona_id, "EMPLEADO")
-        assert AuthorizationService.has_permission(
-            verification, principal, "EMPLEADO_GESTIONAR"
-        )
+        assert AuthorizationService.has_permission(verification, principal, "EMPLEADO_GESTIONAR")
 
 
 def test_132_bootstrap_never_converts_existing_client(engine):
@@ -345,9 +348,7 @@ def test_133_each_employee_role_resolves_its_dashboard(session, role_name, dashb
 
 
 def test_134_design_dashboard_can_list_real_versions(api_client_factory, employee):
-    response = api_client_factory(employee).get(
-        "/api/v1/disenos/pedidos/1/lineas/1/versiones"
-    )
+    response = api_client_factory(employee).get("/api/v1/disenos/pedidos/1/lineas/1/versiones")
     assert response.status_code == 200
     assert response.json()[0]["numero_version"] == 1
 
@@ -356,3 +357,52 @@ def test_135_production_cannot_list_customer_directory(session, api_client_facto
     production = add_employee(session, "PRODUCCION")
     session.commit()
     assert api_client_factory(production).get("/api/v1/clientes").status_code == 403
+
+
+def test_136_invitation_api_validates_sets_password_and_activates(engine, session, employee):
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    subject = str(uuid4())
+    email = f"{uuid4().hex}@example.test"
+    gateway = InviteGateway(subject=subject)
+    coordinator = EmployeeInvitationCoordinator(factory, gateway, redirect_to=None)
+    coordinator.invite(
+        principal=employee,
+        names="Empleado",
+        surnames="Invitado",
+        email=email,
+        phone=None,
+        document=None,
+        role_id=role_id(session, "VENDEDOR"),
+        capacity=10,
+    )
+    claims = {"sub": subject, "email": email, "is_anonymous": False}
+    verifier = FakeVerifier(claims)
+    settings = Settings(database_url=str(engine.url), app_env="test")
+    application = create_app(
+        settings,
+        engine=engine,
+        auth_provider=SupabaseAuthenticationProvider(verifier),
+    )
+    application.state.token_verifier = verifier
+    application.state.auth_gateway = gateway
+    application.state.employee_invitation_coordinator = coordinator
+    headers = {"Authorization": "Bearer invitation-session-token"}
+
+    with TestClient(application) as client:
+        validation = client.get("/api/v1/auth/validar-invitacion", headers=headers)
+        assert validation.status_code == 200
+        assert validation.json()["estado"] == "INVITACION_VERIFICADA"
+
+        activation = client.post(
+            "/api/v1/auth/activar-empleado",
+            headers=headers,
+            json={"password": "secure-password-123"},
+        )
+        assert activation.status_code == 200
+        assert activation.json()["estado"] == "ACTIVO"
+
+        profile = client.get("/api/v1/auth/me", headers=headers)
+        assert profile.status_code == 200
+        assert profile.json()["dashboard_inicial"] == "/app/ventas/"
+
+    assert gateway.password_calls == [("invitation-session-token", "secure-password-123")]

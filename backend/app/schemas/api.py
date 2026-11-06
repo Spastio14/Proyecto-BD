@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
 
 class ORMModel(BaseModel):
@@ -25,6 +25,27 @@ class RegistrationRequest(StrictInput):
 class LoginRequest(StrictInput):
     email: str = Field(min_length=3, max_length=254)
     password: SecretStr = Field(min_length=1, max_length=128)
+
+
+class InvitationExchangeRequest(StrictInput):
+    token_hash: str | None = Field(default=None, min_length=16, max_length=2048)
+    type: Literal["invite"] = "invite"
+    code: str | None = Field(default=None, min_length=8, max_length=2048)
+    code_verifier: str | None = Field(default=None, min_length=32, max_length=256)
+
+    @model_validator(mode="after")
+    def validate_exchange_mode(self):
+        token_mode = self.token_hash is not None
+        code_mode = self.code is not None or self.code_verifier is not None
+        if token_mode == code_mode:
+            raise ValueError("Envía token_hash o el par code/code_verifier")
+        if code_mode and (self.code is None or self.code_verifier is None):
+            raise ValueError("code y code_verifier son obligatorios juntos")
+        return self
+
+
+class EmployeeActivationRequest(StrictInput):
+    password: SecretStr = Field(min_length=8, max_length=128)
 
 
 class RegistrationRecoveryRequest(StrictInput):

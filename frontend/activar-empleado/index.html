@@ -1,1 +1,32 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Activar acceso · Doble R</title><link rel="stylesheet" href="../styles.css"></head><body class="public-page"><main><section class="hero"><article class="panel"><p class="eyebrow">Invitación privada</p><h1>Activar acceso de empleado</h1><p id="activation-state">Verificando la identidad recibida desde Supabase…</p><a class="primary-link hidden" id="continue" href="/app/">Continuar</a></article></section></main><script src="../activation.js" defer></script></body></html>
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Activar acceso · Doble R</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body class="public-page">
+  <main>
+    <section class="hero">
+      <article class="panel">
+        <p class="eyebrow">Invitación privada</p>
+        <h1>Activar acceso de empleado</h1>
+        <p id="activation-state" aria-live="polite">Verificando la invitación recibida desde Supabase…</p>
+        <form id="activation-form" class="form-grid hidden">
+          <label>Nueva contraseña
+            <input name="password" type="password" minlength="8" maxlength="128" autocomplete="new-password" required>
+          </label>
+          <label>Confirmar contraseña
+            <input name="password_confirmation" type="password" minlength="8" maxlength="128" autocomplete="new-password" required>
+          </label>
+          <button type="submit">Establecer contraseña y activar</button>
+        </form>
+        <a class="primary-link hidden" id="continue" href="/app/">Volver al inicio</a>
+      </article>
+    </section>
+  </main>
+  <script src="../auth-session.js" defer></script>
+  <script src="../activation.js" defer></script>
+</body>
+</html>

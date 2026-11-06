@@ -88,14 +88,42 @@ datos y selecciona un rol cargado desde la API. FastAPI verifica
 `EMPLEADO_GESTIONAR`, crea un perfil EMPLEADO inactivo y llama a
 `POST /auth/v1/invite` desde el servidor con la clave privada.
 
-El administrador nunca define la contraseña. La persona usa el enlace recibido,
-Supabase establece una sesión y `/app/activar-empleado/` envía ese JWT a
-`POST /api/v1/auth/activar-empleado`. Sólo entonces el perfil pasa a ACTIVO.
+El administrador nunca define la contraseña. La persona usa el enlace recibido
+y `/app/activar-empleado/` admite los formatos oficiales que puede entregar
+Supabase Auth: una sesión en el fragmento (`access_token`), un `token_hash` de
+tipo `invite` o un código PKCE acompañado por el verificador que originó ese
+flujo en el mismo navegador. Los parámetros `error`, `error_code` y
+`error_description` se interpretan antes de intentar activar.
 
-La URL configurada en `EMPLOYEE_INVITE_REDIRECT_URL` debe aparecer también en
-la lista de redirect URLs permitidas de Supabase Auth. Para desarrollo local es
-`http://127.0.0.1:8000/app/activar-empleado/`; un despliegue debe usar su origen
-HTTPS exacto. Cambiar esa lista remota requiere autorización del propietario.
+El navegador mantiene la sesión de invitación sólo en memoria. Primero llama a
+`GET /api/v1/auth/validar-invitacion`: FastAPI verifica la firma JWT con JWKS y
+PostgreSQL confirma que existe un EMPLEADO inactivo, sin perfil CLIENTE y con
+rol administrativo activo. Después solicita la contraseña inicial y
+`POST /api/v1/auth/activar-empleado` la establece mediante `PUT /auth/v1/user`
+usando el JWT del propio invitado. Sólo tras activar y confirmar `/auth/me` se
+guarda la sesión en `sessionStorage` y se abre el dashboard del rol.
+
+`EMPLOYEE_INVITE_REDIRECT_URL` debe ser una URL absoluta y coincidir con una
+entrada de **Authentication → URL Configuration → Redirect URLs** en Supabase.
+Para el servidor local de este repositorio:
+
+```dotenv
+EMPLOYEE_INVITE_REDIRECT_URL=http://127.0.0.1:8000/app/activar-empleado/
+```
+
+Se debe permitir exactamente esa URL. En un despliegue se configura, por
+ejemplo, `https://sistema.example.com/app/activar-empleado/` tanto en el entorno
+de FastAPI como en Redirect URLs. No se debe mezclar `localhost` con
+`127.0.0.1`, cambiar el puerto ni omitir la barra final si la URL registrada no
+lo contempla.
+
+La plantilla predeterminada de invitación puede conservar `{{ .ConfirmationURL }}`:
+Supabase verifica el enlace y redirige a `redirect_to` con una sesión. Una
+plantilla personalizada que dirija primero a la aplicación debe transmitir
+`token_hash={{ .TokenHash }}&type=invite`; el frontend lo intercambia en el
+servidor mediante `/auth/v1/verify`. Las claves privadas nunca llegan al
+navegador. Cambiar Redirect URLs o plantillas en el proyecto remoto requiere
+autorización separada del propietario.
 
 Si falla el correo, el perfil queda INACTIVO y sin privilegios. Si Auth alcanzó
 a crear la identidad pero la respuesta se perdió, el empleado puede iniciar
@@ -121,6 +149,18 @@ direcciones ficticias controladas.
 Después del login y al restaurar `sessionStorage`, el frontend consulta
 `GET /api/v1/auth/me`. El endpoint verifica el JWT y devuelve persona, perfil,
 roles activos, permisos efectivos, estado y dashboard inicial.
+
+El token que devuelve el login no se persiste hasta que `/auth/me` responde con
+la identidad. Los errores 429, 503 y los fallos de red se reintentan dos veces;
+401 elimina una sesión restaurada vencida o inválida; 403 conserva el
+diagnóstico de cuenta inactiva; 404 sólo muestra el formulario de recuperación
+cuando el código es `account_link_missing`; y 409 conserva el conflicto para
+revisión. El acceso público nunca llama a la activación de empleados.
+
+Un fallo al descargar JWKS se devuelve como 503
+`identity_verification_unavailable`. No se confunde con firma inválida y no se
+desactiva la validación criptográfica. Una firma, audiencia, emisor o token
+inválidos siguen cerrando el acceso con 401.
 
 Prioridad cuando existen varios roles: ADMINISTRADOR, CONTADOR, VENDEDOR y
 PRODUCCION. La prioridad sólo elige la interfaz; cada endpoint vuelve a consultar

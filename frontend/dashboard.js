@@ -13,13 +13,7 @@ function notice(text, error = false) {
 async function api(path, options = {}) {
   const form = options.body instanceof FormData;
   const headers = { ...(form || !options.body ? {} : { "Content-Type":"application/json" }), ...(options.headers || {}), Authorization:`Bearer ${accessToken()}` };
-  let response;
-  try { response = await fetch(`/api/v1${path}`, { ...options, headers }); }
-  catch { throw new Error("No fue posible comunicarse con la API"); }
-  if (response.status === 204) return null;
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
-  return data;
+  return AuthSession.requestJSON(fetch, `/api/v1${path}`, { ...options, headers });
 }
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[char]));
 const display = (value) => Array.isArray(value) ? value.join(", ") : typeof value === "object" && value !== null ? JSON.stringify(value) : String(value ?? "");
@@ -162,7 +156,21 @@ async function navigate(view) {
 }
 async function start() {
   if (!accessToken()) { location.assign("/app/#acceso"); return; }
-  try { identity=await api("/auth/me"); } catch(error) { sessionStorage.removeItem("s2r_access_token"); location.assign(`/app/#acceso`); return; }
+  try {
+    identity = await AuthSession.verifyIdentity(
+      () => api("/auth/me"),
+      { retries: 2, sleep: (delay) => new Promise((resolve) => setTimeout(resolve, delay)) },
+    );
+  } catch (error) {
+    const outcome = AuthSession.classifyIdentityError(error);
+    if (outcome.clearSession) {
+      sessionStorage.removeItem("s2r_access_token");
+      location.assign("/app/#acceso");
+      return;
+    }
+    notice(outcome.message, true);
+    return;
+  }
   if (identity.dashboard_inicial !== expectedDashboard) { location.assign(identity.dashboard_inicial); return; }
   $("#user-name").textContent=identity.nombre;
   $("#user-role").textContent=identity.roles.join(" · ") || identity.tipo_perfil;

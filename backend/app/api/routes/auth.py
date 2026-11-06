@@ -5,12 +5,15 @@ from app.core.exceptions import DomainError
 from app.core.security import (
     Principal,
     VerifiedAuthIdentity,
+    bearer_token,
     get_principal,
     get_verified_auth_identity,
 )
 from app.db.session import get_session
 from app.schemas.api import (
+    EmployeeActivationRequest,
     GuestCreate,
+    InvitationExchangeRequest,
     LoginRequest,
     RegistrationRecoveryRequest,
     RegistrationRequest,
@@ -61,6 +64,19 @@ def current_identity(
     return AuthorizationService.identity(session, principal)
 
 
+@router.post("/intercambiar-invitacion")
+def exchange_invitation(payload: InvitationExchangeRequest, request: Request) -> dict:
+    gateway = getattr(request.app.state, "auth_gateway", None)
+    if gateway is None:
+        raise AuthRouteUnavailable("La verificación de invitaciones no está configurada")
+    if payload.token_hash is not None:
+        return gateway.exchange_invitation(token_hash=payload.token_hash)
+    return gateway.exchange_code(
+        code=payload.code,
+        code_verifier=payload.code_verifier,
+    )
+
+
 @router.post("/completar-registro")
 def complete_registration(
     payload: RegistrationRecoveryRequest,
@@ -83,14 +99,38 @@ def complete_registration(
     }
 
 
-@router.post("/activar-empleado")
-def activate_employee(
+@router.get("/validar-invitacion")
+def validate_employee_invitation(
     request: Request,
     identity: VerifiedAuthIdentity = Depends(get_verified_auth_identity),
 ) -> dict:
     coordinator = getattr(request.app.state, "employee_invitation_coordinator", None)
     if coordinator is None:
         raise AuthRouteUnavailable("La activación de empleados no está configurada")
+    result = coordinator.validate_pending(identity)
+    return {
+        "id_persona": result.persona_id,
+        "codigo_empleado": result.employee_code,
+        "estado": result.status,
+    }
+
+
+@router.post("/activar-empleado")
+def activate_employee(
+    payload: EmployeeActivationRequest,
+    request: Request,
+    identity: VerifiedAuthIdentity = Depends(get_verified_auth_identity),
+) -> dict:
+    coordinator = getattr(request.app.state, "employee_invitation_coordinator", None)
+    gateway = getattr(request.app.state, "auth_gateway", None)
+    if coordinator is None or gateway is None:
+        raise AuthRouteUnavailable("La activación de empleados no está configurada")
+    coordinator.validate_pending(identity)
+    access_token = bearer_token(request)
+    gateway.update_password(
+        access_token=access_token,
+        password=payload.password.get_secret_value(),
+    )
     result = coordinator.activate(identity)
     return {
         "id_persona": result.persona_id,
