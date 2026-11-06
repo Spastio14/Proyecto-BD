@@ -1,13 +1,21 @@
 from fastapi import APIRouter, Depends, Request, Response, status
+from sqlalchemy.orm import Session
 
 from app.core.exceptions import DomainError
-from app.core.security import VerifiedAuthIdentity, get_verified_auth_identity
+from app.core.security import (
+    Principal,
+    VerifiedAuthIdentity,
+    get_principal,
+    get_verified_auth_identity,
+)
+from app.db.session import get_session
 from app.schemas.api import (
     GuestCreate,
     LoginRequest,
     RegistrationRecoveryRequest,
     RegistrationRequest,
 )
+from app.services.authorization import AuthorizationService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -45,6 +53,14 @@ def login(payload: LoginRequest, request: Request) -> dict:
     )
 
 
+@router.get("/me")
+def current_identity(
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    return AuthorizationService.identity(session, principal)
+
+
 @router.post("/completar-registro")
 def complete_registration(
     payload: RegistrationRecoveryRequest,
@@ -64,6 +80,22 @@ def complete_registration(
     return {
         "id_persona": result.persona_id,
         "vinculo_creado": result.created,
+    }
+
+
+@router.post("/activar-empleado")
+def activate_employee(
+    request: Request,
+    identity: VerifiedAuthIdentity = Depends(get_verified_auth_identity),
+) -> dict:
+    coordinator = getattr(request.app.state, "employee_invitation_coordinator", None)
+    if coordinator is None:
+        raise AuthRouteUnavailable("La activación de empleados no está configurada")
+    result = coordinator.activate(identity)
+    return {
+        "id_persona": result.persona_id,
+        "codigo_empleado": result.employee_code,
+        "estado": result.status,
     }
 
 

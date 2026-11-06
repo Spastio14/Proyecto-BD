@@ -41,7 +41,10 @@ class RegistrationCoordinator:
                 .where(func.lower(Persona.correo_electronico) == normalized_email)
             )
             if duplicate is not None:
-                raise Conflict("El correo ya tiene un perfil comercial")
+                raise Conflict(
+                    "No fue posible crear la cuenta. Si ya te registraste, "
+                    "inicia sesión o completa el vínculo"
+                )
 
         auth_user_id = self.gateway.sign_up(email=normalized_email, password=password)
         try:
