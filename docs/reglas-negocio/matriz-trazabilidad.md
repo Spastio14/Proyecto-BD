@@ -64,3 +64,24 @@ representan código ya implementado.
 | Comprobantes | bucket privado y referencia coherente en TRANSACCION | casos 67–68 |
 | RLS | datos privados cerrados a Data API | caso 70 y runner estructural |
 | Proyecto alojado | versión, esquema e historial de migraciones | casos 76–77 pendientes de opt-in remoto |
+
+## Validación integral de Fase 4
+
+La matriz detallada y sus clasificaciones se encuentran en
+`docs/pruebas/fase-4-matriz.md`. Fase 4 añadió los casos 81–109, con 32
+ejecuciones por la parametrización de formatos de archivo.
+
+| Área | Evidencia añadida | Resultado |
+|---|---|---|
+| Mayorista autorizado | casos 81–82 | Requiere tipo elegible y `condicion_comercial = MAYORISTA` |
+| Límites al convertir cotización | casos 83–84, 93 | Comparte bloqueo y reglas con creación directa |
+| Diseño vigente | casos 85 y 87 | Un rechazo posterior bloquea producción; versionado concurrente consecutivo |
+| Pagos concurrentes | casos 86 y 99 | Reporte y confirmación idempotentes con conexiones independientes |
+| Límites concurrentes | casos 92–93 | Registrados y conversiones no superan sus máximos |
+| Cookies y Storage | casos 96–97 y 103–105 | Expiración, atributos, formatos y reemplazo concurrente compensado |
+| Inventario y pérdidas | casos 98, 100–102, 108 | Rechazo sin reserva, disponibilidad, costo y confirmación única |
+| Flujos A–E | casos 106–109 más carreras 19/86/87/92/93/99/101/105 | Núcleo comercial y aislamiento validados localmente |
+
+Compras, reembolsos, entrega, aceptación HTTP de cotizaciones, rechazo HTTP de
+pagos y reportes financieros continúan pendientes de implementación. No se
+calcula utilidad neta hasta aprobar la asignación de costos y gastos.

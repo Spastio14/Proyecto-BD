@@ -110,7 +110,13 @@ def test_09_detail_price_comes_from_database(session):
 def test_10_wholesale_price_only_when_scale_matches(session):
     service = PricingService()
     retail = service.price_line(session, client_type="REGISTRADO", variant_id=1, quantity=11)
-    wholesale = service.price_line(session, client_type="REGISTRADO", variant_id=1, quantity=12)
+    wholesale = service.price_line(
+        session,
+        client_type="REGISTRADO",
+        commercial_condition="MAYORISTA",
+        variant_id=1,
+        quantity=12,
+    )
     assert retail.mode == "DETALLE"
     assert wholesale.mode == "MAYORISTA"
     assert wholesale.unit_price == Decimal("80.00")

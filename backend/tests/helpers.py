@@ -8,7 +8,12 @@ from app.models.entities import Cliente, Pedido, Persona
 from app.services.orders import OrderLineInput, OrderService
 
 
-def add_client(session: Session, *, client_type: str = "REGISTRADO") -> Principal:
+def add_client(
+    session: Session,
+    *,
+    client_type: str = "REGISTRADO",
+    commercial_condition: str = "DETALLE",
+) -> Principal:
     person = Persona(
         nombres="Cliente",
         apellidos="Prueba",
@@ -22,7 +27,7 @@ def add_client(session: Session, *, client_type: str = "REGISTRADO") -> Principa
         Cliente(
             id_persona=person.id_persona,
             tipo_cliente=client_type,
-            condicion_comercial="DETALLE",
+            condicion_comercial=commercial_condition,
             fecha_registro=datetime.now(UTC),
             origen_registro="TEST",
             estado="ACTIVO",

@@ -11,6 +11,7 @@ from app.domain.money import ZERO, minimum_advance, money
 from app.domain.orders import ACTIVE_GUEST_STATES, ALLOWED_TRANSITIONS
 from app.models.entities import (
     Cancelacion,
+    Cliente,
     DetallePedido,
     HistorialPedido,
     HitoPago,
@@ -44,24 +45,18 @@ class OrderService:
         delivery_mode: str = "RETIRO",
     ) -> Pedido:
         client = lock_client(session, principal.persona_id)
-        if client.estado != "ACTIVO":
-            raise Conflict("El cliente no está activo")
         if not lines:
             raise Conflict("El pedido requiere al menos una línea")
         if any(line.quantity <= 0 for line in lines):
             raise Conflict("Todas las cantidades deben ser positivas")
         total_units = sum(line.quantity for line in lines)
-        if client.tipo_cliente == "INVITADO":
-            if total_units > 5:
-                raise Conflict("Un invitado puede solicitar como máximo 5 unidades")
-            self._enforce_guest_limit(session, client.id_persona)
-        elif client.tipo_cliente == "REGISTRADO":
-            self._enforce_registered_limit(session, client.id_persona)
+        self.enforce_client_limits(session, client=client, total_units=total_units)
 
         priced = [
             self.pricing.price_line(
                 session,
                 client_type=client.tipo_cliente,
+                commercial_condition=client.condicion_comercial,
                 variant_id=line.variant_id,
                 quantity=line.quantity,
                 promotion_id=line.promotion_id,
@@ -148,6 +143,17 @@ class OrderService:
         )
         session.flush()
         return order
+
+    @classmethod
+    def enforce_client_limits(cls, session: Session, *, client: Cliente, total_units: int) -> None:
+        if client.estado != "ACTIVO":
+            raise Conflict("El cliente no está activo")
+        if client.tipo_cliente == "INVITADO":
+            if total_units > 5:
+                raise Conflict("Un invitado puede solicitar como máximo 5 unidades")
+            cls._enforce_guest_limit(session, client.id_persona)
+        elif client.tipo_cliente in {"REGISTRADO", "EMPRESA"}:
+            cls._enforce_registered_limit(session, client.id_persona)
 
     @staticmethod
     def _enforce_guest_limit(session: Session, client_id: int) -> None:
