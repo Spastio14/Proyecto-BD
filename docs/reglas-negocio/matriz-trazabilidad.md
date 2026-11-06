@@ -82,6 +82,19 @@ ejecuciones por la parametrización de formatos de archivo.
 | Inventario y pérdidas | casos 98, 100–102, 108 | Rechazo sin reserva, disponibilidad, costo y confirmación única |
 | Flujos A–E | casos 106–109 más carreras 19/86/87/92/93/99/101/105 | Núcleo comercial y aislamiento validados localmente |
 
-Compras, reembolsos, entrega, aceptación HTTP de cotizaciones, rechazo HTTP de
-pagos y reportes financieros continúan pendientes de implementación. No se
-calcula utilidad neta hasta aprobar la asignación de costos y gastos.
+## Sistema funcional de Fase 4.1
+
+| Área | Implementación | Evidencia |
+|---|---|---|
+| Cotizaciones | decisión aceptar/rechazar y conversión con propiedad, estado y vencimiento | casos 110–111 |
+| Pedidos | detalles, historial y transiciones autorizadas; operaciones específicas conservan sus reglas | caso 111 y regresión 106–109 |
+| Pagos | consulta, listado por pedido, confirmación y rechazo con permisos | caso 120 y regresión 86, 98–100 |
+| Compras | borrador, detalles, total, confirmación atómica y entrada única | casos 112–114, 117–118 |
+| Entrega | programación para envío y finalización sólo desde LISTO | caso 115 |
+| Reportes | resumen API y 18 consultas SQL de lectura | caso 116 y runner PostgreSQL |
+| Interfaz | HTML/CSS/JS servido por FastAPI, JWT Supabase y datos API reales | caso 116 y validación de sintaxis JS |
+
+Los reembolsos permanecen pendientes porque faltan porcentajes de retención,
+autoridad, estados elegibles, método de devolución y tratamiento de pagos
+parciales. No se calcula utilidad neta hasta aprobar la asignación de compras,
+pérdidas, gastos, retenciones y reembolsos al periodo contable.
