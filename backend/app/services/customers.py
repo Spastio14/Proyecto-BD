@@ -4,7 +4,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import Conflict, NotFound
+from app.core.security import Principal
 from app.models.entities import Cliente, Persona
+from app.services.authorization import AuthorizationService
 
 
 class CustomerService:
@@ -50,3 +52,28 @@ class CustomerService:
         if client is None:
             raise NotFound("Cliente no encontrado")
         return client
+
+    @staticmethod
+    def list_for_employee(
+        session: Session, principal: Principal
+    ) -> list[dict[str, object]]:
+        AuthorizationService.require(session, principal, "CLIENTE_CONSULTAR")
+        rows = session.execute(
+            select(Cliente, Persona)
+            .join(Persona, Persona.id_persona == Cliente.id_persona)
+            .order_by(Persona.nombres, Persona.apellidos)
+        ).all()
+        return [
+            {
+                "id_persona": customer.id_persona,
+                "nombre": " ".join(
+                    value for value in (person.nombres, person.apellidos) if value
+                ),
+                "correo": person.correo_electronico,
+                "telefono": person.telefono_contacto,
+                "tipo_cliente": customer.tipo_cliente,
+                "condicion_comercial": customer.condicion_comercial,
+                "estado": customer.estado,
+            }
+            for customer, person in rows
+        ]

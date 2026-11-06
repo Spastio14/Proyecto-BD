@@ -23,7 +23,7 @@ def availability(
     principal: Principal = Depends(get_principal),
     session: Session = Depends(get_session),
 ) -> dict:
-    AuthorizationService.require(session, principal, "INVENTARIO_GESTIONAR")
+    AuthorizationService.require(session, principal, "INVENTARIO_CONSULTAR")
     return {
         "id_articulo": article_id,
         "disponible": InventoryService.availability(session, article_id),

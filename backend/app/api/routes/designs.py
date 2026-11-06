@@ -15,6 +15,30 @@ class StorageRouteUnavailable(DomainError):
     code = "storage_not_configured"
 
 
+@router.get("/pedidos/{order_id}/lineas/{line_number}/versiones")
+def list_versions(
+    order_id: int,
+    line_number: int,
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> list[dict[str, object]]:
+    return [
+        {
+            "numero_version": version.numero_version,
+            "nombre_archivo": version.nombre_archivo,
+            "fecha_creacion": version.fecha_creacion,
+            "observaciones": version.observaciones,
+            "es_aprobado": version.es_aprobado,
+        }
+        for version in DesignService.list_versions(
+            session,
+            order_id=order_id,
+            line_number=line_number,
+            principal=principal,
+        )
+    ]
+
+
 @router.post(
     "/pedidos/{order_id}/lineas/{line_number}/versiones",
     status_code=status.HTTP_201_CREATED,

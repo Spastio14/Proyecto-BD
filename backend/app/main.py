@@ -20,6 +20,7 @@ from app.core.security import (
 )
 from app.db.session import build_engine, build_session_factory, verify_connection
 from app.integrations.supabase import SupabaseHTTPClient
+from app.services.employees import EmployeeInvitationCoordinator
 from app.services.identity import GuestCoordinator, RegistrationCoordinator
 from app.services.storage import StorageCoordinator
 
@@ -41,7 +42,7 @@ def create_app(
 
     application = FastAPI(
         title="Sublimación Doble R API",
-        version="4.1.0",
+        version="4.2.0",
         lifespan=lifespan,
     )
     application.state.engine = database_engine
@@ -54,6 +55,7 @@ def create_app(
     application.state.guest_signer = None
     application.state.storage_coordinator = None
     application.state.token_verifier = None
+    application.state.employee_invitation_coordinator = None
 
     providers: list[AuthenticationProvider] = []
     if (
@@ -77,6 +79,11 @@ def create_app(
                 design_max_bytes=configured.storage_design_max_bytes,
                 receipt_max_bytes=configured.storage_receipt_max_bytes,
                 signed_url_ttl=configured.storage_signed_url_ttl,
+            )
+            application.state.employee_invitation_coordinator = EmployeeInvitationCoordinator(
+                factory,
+                gateway,
+                redirect_to=configured.employee_invite_redirect_url,
             )
         token_verifier = SupabaseTokenVerifier(
             project_url=configured.supabase_url,
