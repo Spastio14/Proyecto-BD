@@ -50,6 +50,7 @@ def create_app(
     application.state.guest_coordinator = None
     application.state.guest_signer = None
     application.state.storage_coordinator = None
+    application.state.token_verifier = None
 
     providers: list[AuthenticationProvider] = []
     if (
@@ -65,8 +66,8 @@ def create_app(
         )
         gateway = SupabaseHTTPClient(configured.supabase_url, public_key, secret_key)
         application.state.auth_gateway = gateway
+        application.state.registration_coordinator = RegistrationCoordinator(factory, gateway)
         if secret_key:
-            application.state.registration_coordinator = RegistrationCoordinator(factory, gateway)
             application.state.storage_coordinator = StorageCoordinator(
                 factory,
                 gateway,
@@ -74,15 +75,13 @@ def create_app(
                 receipt_max_bytes=configured.storage_receipt_max_bytes,
                 signed_url_ttl=configured.storage_signed_url_ttl,
             )
-        providers.append(
-            SupabaseAuthenticationProvider(
-                SupabaseTokenVerifier(
-                    project_url=configured.supabase_url,
-                    project_ref=configured.supabase_project_ref,
-                    audience=configured.supabase_jwt_audience,
-                )
-            )
+        token_verifier = SupabaseTokenVerifier(
+            project_url=configured.supabase_url,
+            project_ref=configured.supabase_project_ref,
+            audience=configured.supabase_jwt_audience,
         )
+        application.state.token_verifier = token_verifier
+        providers.append(SupabaseAuthenticationProvider(token_verifier))
     if configured.guest_cookie_secret:
         signer = GuestCredentialSigner(
             configured.guest_cookie_secret.get_secret_value(),

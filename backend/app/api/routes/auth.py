@@ -1,7 +1,13 @@
-from fastapi import APIRouter, Request, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 
 from app.core.exceptions import DomainError
-from app.schemas.api import GuestCreate, LoginRequest, RegistrationRequest
+from app.core.security import VerifiedAuthIdentity, get_verified_auth_identity
+from app.schemas.api import (
+    GuestCreate,
+    LoginRequest,
+    RegistrationRecoveryRequest,
+    RegistrationRequest,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -37,6 +43,28 @@ def login(payload: LoginRequest, request: Request) -> dict:
     return gateway.sign_in(
         email=payload.email.strip().lower(), password=payload.password.get_secret_value()
     )
+
+
+@router.post("/completar-registro")
+def complete_registration(
+    payload: RegistrationRecoveryRequest,
+    request: Request,
+    identity: VerifiedAuthIdentity = Depends(get_verified_auth_identity),
+) -> dict:
+    coordinator = getattr(request.app.state, "registration_coordinator", None)
+    if coordinator is None:
+        raise AuthRouteUnavailable("El vínculo con Supabase no está configurado")
+    result = coordinator.complete_verified_identity(
+        subject=identity.subject,
+        email=identity.email,
+        names=payload.names,
+        surnames=payload.surnames,
+        phone=payload.phone,
+    )
+    return {
+        "id_persona": result.persona_id,
+        "vinculo_creado": result.created,
+    }
 
 
 @router.post("/invitado", status_code=status.HTTP_201_CREATED)

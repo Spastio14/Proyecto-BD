@@ -21,7 +21,7 @@ from app.core.security import (
     SupabaseTokenVerifier,
 )
 from app.db.session import build_engine
-from app.models.entities import CuentaAcceso, Transaccion, VersionDiseno
+from app.models.entities import CuentaAcceso, Persona, Transaccion, VersionDiseno
 from app.services.authorization import AuthorizationService
 from app.services.identity import RegistrationCoordinator
 from app.services.payments import PaymentService
@@ -92,7 +92,6 @@ class FakeVerifier:
 class FakeGateway:
     def __init__(self, auth_id=None):
         self.auth_id = auth_id or str(uuid4())
-        self.deleted = []
         self.uploaded = []
         self.removed = []
 
@@ -101,9 +100,6 @@ class FakeGateway:
 
     def sign_in(self, *, email, password):
         return {}
-
-    def delete_user(self, user_id):
-        self.deleted.append(user_id)
 
     def upload(self, *, bucket, path, content, content_type):
         self.uploaded.append((bucket, path, content_type, len(content)))
@@ -201,14 +197,13 @@ def test_60_registration_links_auth_user_to_existing_model(engine):
     with factory() as session:
         account = session.scalar(select(CuentaAcceso).where(CuentaAcceso.id_persona == person_id))
         assert account.identificador_autenticacion == gateway.auth_id
-        assert gateway.deleted == []
 
 
-def test_61_registration_compensates_external_user_on_local_conflict(engine):
+def test_61_registration_never_deletes_existing_auth_user_on_local_conflict(engine):
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     existing_auth_id = "11111111-1111-4111-8111-111111111111"
     gateway = FakeGateway(existing_auth_id)
-    with pytest.raises(Conflict, match="vínculo local"):
+    with pytest.raises(Conflict, match="vínculo comercial"):
         RegistrationCoordinator(factory, gateway).register(
             names="Conflicto",
             surnames=None,
@@ -216,7 +211,11 @@ def test_61_registration_compensates_external_user_on_local_conflict(engine):
             phone=None,
             password="password-for-test",
         )
-    assert gateway.deleted == [existing_auth_id]
+    with factory() as session:
+        account = session.scalar(
+            select(CuentaAcceso).where(CuentaAcceso.identificador_autenticacion == existing_auth_id)
+        )
+        assert account.id_persona == 2
 
 
 def test_62_remote_database_configuration_requires_tls():
@@ -488,8 +487,85 @@ def test_75_signed_url_uses_bounded_expiration(engine, customer):
     assert signed.endswith("ttl=300")
 
 
+def test_76_verified_auth_identity_completes_missing_commercial_link(engine):
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    coordinator = RegistrationCoordinator(factory, FakeGateway())
+    subject = str(uuid4())
+    email = f"{uuid4().hex}@example.test"
+
+    first = coordinator.complete_verified_identity(
+        subject=subject,
+        email=email,
+        names="Cuenta",
+        surnames="Recuperada",
+        phone=None,
+    )
+    second = coordinator.complete_verified_identity(
+        subject=subject,
+        email=email,
+        names="No debe duplicarse",
+        surnames=None,
+        phone=None,
+    )
+
+    assert first.created is True
+    assert second.created is False
+    assert second.persona_id == first.persona_id
+    with factory() as session:
+        accounts = session.scalars(
+            select(CuentaAcceso).where(CuentaAcceso.identificador_autenticacion == subject)
+        ).all()
+        person = session.get(Persona, first.persona_id)
+        assert len(accounts) == 1
+        assert person.nombres == "Cuenta"
+
+
+def test_77_recovery_does_not_link_identity_by_email_alone(engine):
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    coordinator = RegistrationCoordinator(factory, FakeGateway())
+    subject = str(uuid4())
+    with pytest.raises(Conflict, match="revisión administrativa"):
+        coordinator.complete_verified_identity(
+            subject=subject,
+            email="cliente@example.test",
+            names="Suplantación",
+            surnames=None,
+            phone=None,
+        )
+    with factory() as session:
+        assert (
+            session.scalar(
+                select(CuentaAcceso).where(CuentaAcceso.identificador_autenticacion == subject)
+            )
+            is None
+        )
+
+
+def test_78_recovery_endpoint_uses_verified_token_subject(engine, api_client_factory):
+    subject = str(uuid4())
+    email = f"{uuid4().hex}@example.test"
+    client = api_client_factory(None)
+    client.app.state.token_verifier = FakeVerifier({"sub": subject, "email": email})
+    client.app.state.registration_coordinator = RegistrationCoordinator(
+        client.app.state.session_factory, FakeGateway()
+    )
+    response = client.post(
+        "/api/v1/auth/completar-registro",
+        headers={"Authorization": "Bearer verified-token"},
+        json={"names": "Recuperación", "surnames": "Segura", "phone": None},
+    )
+    assert response.status_code == 200
+    assert response.json()["vinculo_creado"] is True
+    with sessionmaker(bind=engine)() as session:
+        account = session.scalar(
+            select(CuentaAcceso).where(CuentaAcceso.identificador_autenticacion == subject)
+        )
+        assert account is not None
+        assert session.get(Persona, account.id_persona).correo_electronico == email
+
+
 @pytest.mark.remote
-def test_76_remote_project_is_postgresql_17_and_has_expected_schema():
+def test_79_remote_project_is_postgresql_17_and_has_expected_schema():
     if os.getenv("RUN_SUPABASE_REMOTE_TESTS") != "1":
         pytest.skip("requiere opt-in y credenciales remotas privadas")
     url = os.environ["SUPABASE_TEST_DATABASE_URL"]
@@ -506,7 +582,7 @@ def test_76_remote_project_is_postgresql_17_and_has_expected_schema():
 
 
 @pytest.mark.remote
-def test_77_remote_migration_history_matches_local_files():
+def test_80_remote_migration_history_matches_local_files():
     if os.getenv("RUN_SUPABASE_REMOTE_TESTS") != "1":
         pytest.skip("requiere opt-in, Supabase CLI enlazado y token privado")
     result = subprocess.run(

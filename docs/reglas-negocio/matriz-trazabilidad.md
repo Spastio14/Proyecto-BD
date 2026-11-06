@@ -58,7 +58,7 @@ representan código ya implementado.
 |---|---|---|
 | JWT y cuenta | JWKS, issuer/audience/exp y vínculo CUENTA_ACCESO activo | casos 51–57 |
 | Invitado | cookie cifrada/autenticada Secure/HttpOnly y perfil INVITADO activo | casos 58–59 |
-| Registro | Auth externo, transacción local y eliminación compensatoria | casos 60–61 |
+| Registro | Auth externo, transacción local y recuperación mediante JWT verificado, sin borrar usuarios | casos 60–61 y 76–78 |
 | PostgreSQL alojado | TLS obligatorio y compatibilidad con transaction pooler | casos 62–63 |
 | Diseños | bucket privado, VERSION_DISENO y compensación | casos 64–66, 69 |
 | Comprobantes | bucket privado y referencia coherente en TRANSACCION | casos 67–68 |
