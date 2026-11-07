@@ -102,6 +102,12 @@ class ReportService:
             .mappings()
             .one()
         )
+        pending_deliveries = session.scalar(
+            select(func.count(Pedido.id_pedido)).where(
+                Pedido.modalidad_entrega == "ENVIO",
+                Pedido.estado.not_in(("CANCELADO", "EXPIRADO", "ENTREGADO")),
+            )
+        )
 
         confirmed_purchases = (
             session.execute(
@@ -252,6 +258,7 @@ class ReportService:
             "pedidos_por_estado": orders_state_rows,
             "indicadores_pedidos": order_indicators,
             "pagos_pendientes": dict(pending_payments),
+            "entregas_pendientes": pending_deliveries,
             "compras_confirmadas": dict(confirmed_purchases),
             "stock_bajo": low_stock,
             "actividad_reciente": [dict(row) for row in recent_activity],

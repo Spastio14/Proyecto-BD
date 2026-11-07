@@ -12,6 +12,7 @@ from app.api.routes import (
     losses,
     orders,
     payments,
+    portal,
     production,
     profiles,
     purchases,
@@ -36,3 +37,4 @@ api_router.include_router(deliveries.router)
 api_router.include_router(reports.router)
 api_router.include_router(employees.router)
 api_router.include_router(profiles.router)
+api_router.include_router(portal.router)

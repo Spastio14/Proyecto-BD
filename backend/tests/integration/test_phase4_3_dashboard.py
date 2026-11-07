@@ -15,6 +15,7 @@ def test_214_dashboard_has_operational_kpis_and_audit(session, employee):
         "pedidos_por_estado",
         "indicadores_pedidos",
         "pagos_pendientes",
+        "entregas_pendientes",
         "compras_confirmadas",
         "stock_bajo",
         "actividad_reciente",
