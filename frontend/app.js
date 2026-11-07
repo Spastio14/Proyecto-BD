@@ -20,10 +20,19 @@ async function api(path, options = {}, accessToken = token()) {
 
 const values = (form) => Object.fromEntries(new FormData(form).entries());
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+const formatCurrency = (value) => new Intl.NumberFormat("es-NI", { style: "currency", currency: "NIO" }).format(Number(value || 0));
 
 async function catalog() {
   const rows = await api("/catalogo", {}, "");
-  $("#catalog").innerHTML = rows.map((item) => `<article class="product-card"><span>${escapeHtml(item.categoria)}</span><h3>${escapeHtml(item.producto)}</h3><p>${escapeHtml(item.codigo)}</p><strong>C$ ${escapeHtml(item.precio_detalle)}</strong></article>`).join("");
+  if (!rows.length) {
+    $("#catalog").innerHTML = '<div class="empty-state"><h3>El catálogo está en preparación</h3><p>Vuelve pronto para conocer los productos disponibles.</p></div>';
+    return;
+  }
+  const glyphs = ["✦", "○", "◇", "⌁"];
+  $("#catalog").innerHTML = rows.map((item, index) => `<article class="product-card">
+    <div class="product-media tone-${(index % 4) + 1}" aria-hidden="true"><span class="product-glyph">${glyphs[index % glyphs.length]}</span></div>
+    <div class="product-card-body"><span class="product-category">${escapeHtml(item.categoria)}</span><h3>${escapeHtml(item.producto)}</h3><p class="product-code">${escapeHtml(item.codigo)}</p><strong>${escapeHtml(formatCurrency(item.precio_detalle))}</strong></div>
+  </article>`).join("");
 }
 
 async function identifyAndRedirect(accessToken, { persist = false } = {}) {

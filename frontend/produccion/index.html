@@ -1,1 +1,25 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Producción · Doble R</title><link rel="stylesheet" href="../styles.css"></head><body class="dashboard" data-scope="produccion" data-dashboard="/app/produccion/"><aside class="sidebar"><a class="brand" href="/app/"><b>Doble R</b></a><nav id="menu"></nav><footer><button id="logout" class="secondary">Cerrar sesión</button></footer></aside><section class="workspace"><header class="workspace-header"><div><b id="user-name">Cargando…</b><div class="muted" id="user-role"></div></div><span class="status" id="account-state"></span></header><main><p class="eyebrow">Producción y diseño</p><h1 id="view-title">Trabajo operativo</h1><div id="content"></div></main></section><output id="notice" aria-live="polite"></output><script src="../auth-session.js" defer></script><script src="../dashboard.js" defer></script></body></html>
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <title>Producción · Doble R</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body class="dashboard" data-scope="produccion" data-dashboard="/app/produccion/">
+  <a class="skip-link" href="#contenido">Saltar al contenido</a>
+  <aside class="sidebar">
+    <a class="brand" href="/app/" aria-label="Doble R, inicio"><span class="brand-mark" aria-hidden="true">RR</span><span class="brand-copy">Doble R<small>Producción y diseño</small></span></a>
+    <nav id="menu" aria-label="Producción"></nav>
+    <footer><button id="logout" class="secondary" type="button">Cerrar sesión</button></footer>
+  </aside>
+  <section class="workspace">
+    <header class="workspace-header"><div class="identity-block"><b id="user-name">Cargando…</b><span class="muted" id="user-role"></span></div><span class="status" id="account-state"></span></header>
+    <main id="contenido"><header class="workspace-heading"><p class="section-kicker">Producción y diseño</p><h1 id="view-title">Diseños</h1></header><div id="content"></div></main>
+  </section>
+  <output id="notice" aria-live="polite"></output>
+  <script src="../auth-session.js" defer></script>
+  <script src="../dashboard.js" defer></script>
+</body>
+</html>
