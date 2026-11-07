@@ -136,9 +136,14 @@ class SupabaseTokenVerifier:
                 algorithms=[algorithm],
                 audience=self.audience,
                 issuer=self.issuer,
+                leeway=30,
                 options={"require": ["exp", "iat", "sub", "iss", "aud"]},
             )
         except jwt.PyJWTError as exc:
+            logger.warning(
+                "Diagnóstico JWT: exception_type=%s",
+                type(exc).__name__,
+            )
             self._raise_claim_error(exc, algorithm, kid)
         issuer_host = self.issuer.removeprefix("https://").split(".", 1)[0]
         if issuer_host != self.project_ref:
