@@ -14,6 +14,7 @@ from app.services.payments import PaymentService
 from app.services.production import ProductionService
 from tests.helpers import create_order
 from tests.integration.test_payments_inventory import report_payment
+from tests.integration.test_phase4_2_roles_auth import add_employee
 
 pytestmark = pytest.mark.integration
 
@@ -138,3 +139,15 @@ def test_213_operation_endpoint_is_scoped(api_client_factory, customer, guest):
     order_id = order.json()["id_pedido"]
     assert customer_client.get(f"/api/v1/pedidos/{order_id}/operacion").status_code == 200
     assert api_client_factory(guest).get(f"/api/v1/pedidos/{order_id}/operacion").status_code == 403
+
+
+def test_219_production_role_can_read_operational_summary_without_payment_details(
+    session, api_client_factory, customer
+):
+    production = add_employee(session, "PRODUCCION")
+    order = create_order(session, customer)
+    session.commit()
+    response = api_client_factory(production).get(f"/api/v1/pedidos/{order.id_pedido}/operacion")
+    assert response.status_code == 200
+    assert response.json()["pago"]["anticipo_verificado"] == "0.00"
+    assert api_client_factory(production).get("/api/v1/pagos").status_code == 403

@@ -239,7 +239,8 @@ class PaymentService:
         if order is None:
             raise NotFound("Pedido no encontrado")
         if principal.is_employee:
-            AuthorizationService.require(session, principal, "PAGO_CONSULTAR")
+            if not AuthorizationService.has_permission(session, principal, "PAGO_CONSULTAR"):
+                AuthorizationService.require(session, principal, "PEDIDO_GESTIONAR")
         elif order.id_cliente != principal.persona_id:
             raise PermissionDenied("El pedido pertenece a otro cliente")
         milestones = list(

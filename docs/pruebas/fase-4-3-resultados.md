@@ -39,9 +39,9 @@ El comando canónico es:
 ./backend/tests/run.sh
 ```
 
-La ejecución final del 7 de noviembre de 2026 obtuvo 215 pruebas Pytest
+La ejecución final del 7 de noviembre de 2026 obtuvo 216 pruebas Pytest
 aprobadas y 2 omitidas por requerir opt-in remoto. Además aprobó 15 pruebas del
-parser de preflight y 7 casos Node del flujo de sesión: 237 comprobaciones
+parser de preflight y 7 casos Node del flujo de sesión: 238 comprobaciones
 aprobadas, 0 fallidas y 2 omitidas en total. El runner SQL se ejecutó aparte y
 validó dos reconstrucciones, integridad, RLS, seeds, permisos y consultas.
 
