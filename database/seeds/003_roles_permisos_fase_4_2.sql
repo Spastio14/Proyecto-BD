@@ -7,7 +7,8 @@ begin;
 insert into public.permiso (codigo_permiso, descripcion, modulo)
 values
   ('INVENTARIO_CONSULTAR', 'Consultar existencias y disponibilidad', 'INVENTARIO'),
-  ('INVENTARIO_GESTIONAR', 'Consumir y ajustar inventario autorizado', 'INVENTARIO'),
+  ('INVENTARIO_GESTIONAR', 'Registrar artículos y ajustes generales de inventario', 'INVENTARIO'),
+  ('INVENTARIO_CONSUMIR_RESERVAS', 'Consumir materiales previamente reservados para pedidos en producción', 'INVENTARIO'),
   ('CATALOGO_GESTIONAR', 'Mantener catálogo, precios y composiciones', 'CATALOGO'),
   ('COMPRA_CONSULTAR', 'Consultar compras y sus detalles', 'COMPRAS'),
   ('COMPRA_REGISTRAR', 'Crear borradores y detalles de compras', 'COMPRAS'),
@@ -64,6 +65,7 @@ with matriz(rol, permiso) as (
     ('VENDEDOR','PAGO_CONSULTAR'),
     ('PRODUCCION','PEDIDO_GESTIONAR'),
     ('PRODUCCION','INVENTARIO_CONSULTAR'),
+    ('PRODUCCION','INVENTARIO_CONSUMIR_RESERVAS'),
     ('PRODUCCION','DISENO_APROBAR'),
     ('PRODUCCION','PRODUCCION_INICIAR'),
     ('PRODUCCION','PERDIDA_REGISTRAR'),

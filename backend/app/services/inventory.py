@@ -257,8 +257,12 @@ class InventoryService:
     def consume_order(
         self, session: Session, *, order_id: int, principal: Principal
     ) -> list[MovimientoInventario]:
-        AuthorizationService.require(session, principal, "INVENTARIO_GESTIONAR")
-        lock_order(session, order_id)
+        AuthorizationService.require(
+            session, principal, "INVENTARIO_CONSUMIR_RESERVAS"
+        )
+        order = lock_order(session, order_id)
+        if order.estado != "EN_PRODUCCION":
+            raise Conflict("Sólo se consumen reservas de pedidos en producción")
         reservations = list(
             session.scalars(
                 select(ReservaInventario)
@@ -274,6 +278,7 @@ class InventoryService:
             for item in lock_articles(session, {r.id_articulo for r in reservations})
         }
         movements: list[MovimientoInventario] = []
+        new_movements = 0
         now = datetime.now(UTC)
         for reservation in reservations:
             prior = session.scalar(
@@ -283,10 +288,18 @@ class InventoryService:
                 )
             )
             if prior is not None:
+                if (
+                    reservation.estado != "AGOTADA"
+                    or reservation.cantidad_pendiente != ZERO
+                    or prior.cantidad != reservation.cantidad_reservada
+                ):
+                    raise Conflict("El consumo previo no coincide con la reserva")
                 movements.append(prior)
                 continue
             if reservation.estado != "ACTIVA" or reservation.cantidad_pendiente <= ZERO:
                 raise Conflict("La reserva ya fue consumida o liberada")
+            if reservation.cantidad_pendiente > reservation.cantidad_reservada:
+                raise Conflict("La cantidad pendiente de la reserva es inválida")
             article = articles[reservation.id_articulo]
             if article.existencia_actual < reservation.cantidad_pendiente:
                 raise InsufficientInventory("La existencia física no cubre la reserva")
@@ -311,15 +324,20 @@ class InventoryService:
             )
             session.add(movement)
             movements.append(movement)
-        AuditService.record(
-            session,
-            principal=principal,
-            action="CONSUMIR_INVENTARIO",
-            object_type="PEDIDO",
-            object_reference=str(order_id),
-            reason="Consumo de materiales reservados",
-            after={"movimientos": len(movements)},
-        )
+            new_movements += 1
+        if new_movements:
+            AuditService.record(
+                session,
+                principal=principal,
+                action="CONSUMIR_RESERVAS_PRODUCCION",
+                object_type="PEDIDO",
+                object_reference=str(order_id),
+                reason="Consumo de materiales previamente reservados",
+                after={
+                    "movimientos_nuevos": new_movements,
+                    "reservas_consumidas": len(reservations),
+                },
+            )
         session.flush()
         return movements
 

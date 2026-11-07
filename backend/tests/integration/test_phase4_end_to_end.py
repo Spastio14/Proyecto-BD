@@ -129,6 +129,7 @@ def test_100_availability_tracks_reservation_and_consumption(session, customer, 
     payment = report_payment(session, order, customer)
     PaymentService().confirm(session, payment_id=payment.id_transaccion, principal=employee)
     assert InventoryService.availability(session, 1) == initial_available - Decimal("2.000")
+    order.estado = "EN_PRODUCCION"
     InventoryService().consume_order(session, order_id=order.id_pedido, principal=employee)
     assert article.existencia_actual == initial_stock - Decimal("2.000")
     assert InventoryService.availability(session, 1) == initial_available - Decimal("2.000")

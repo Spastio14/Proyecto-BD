@@ -94,6 +94,7 @@ def test_20_inventory_consumption_is_applied_once(session, customer, employee):
     order = create_order(session, customer)
     payment = report_payment(session, order, customer)
     PaymentService().confirm(session, payment_id=payment.id_transaccion, principal=employee)
+    order.estado = "EN_PRODUCCION"
     before = session.get(ArticuloInventariable, 1).existencia_actual
     first = InventoryService().consume_order(session, order_id=order.id_pedido, principal=employee)
     after_first = session.get(ArticuloInventariable, 1).existencia_actual

@@ -74,8 +74,6 @@ class ProductionService:
     def complete(self, session: Session, *, order_id: int, principal: Principal):
         AuthorizationService.require(session, principal, "PRODUCCION_INICIAR")
         order = lock_order(session, order_id)
-        if order.estado == "LISTO":
-            return order
         if order.estado != "EN_PRODUCCION":
             raise Conflict("Sólo un pedido en producción puede marcarse listo")
         reservations = list(
@@ -85,6 +83,22 @@ class ProductionService:
                 .with_for_update()
             )
         )
+        requires_materials = bool(
+            session.scalar(
+                select(func.count())
+                .select_from(DetallePedido)
+                .join(
+                    VarianteProducto,
+                    VarianteProducto.id_variante == DetallePedido.id_variante,
+                )
+                .where(
+                    DetallePedido.id_pedido == order_id,
+                    VarianteProducto.requiere_produccion.is_(True),
+                )
+            )
+        )
+        if requires_materials and not reservations:
+            raise Conflict("El pedido no tiene reservas de producción verificables")
         if any(item.estado != "AGOTADA" or item.cantidad_pendiente > 0 for item in reservations):
             raise Conflict("Deben consumirse todas las reservas antes de completar producción")
         return OrderService().transition(

@@ -61,6 +61,10 @@ apply_file s2r_rebuild_1 "$repo_dir/database/tests/001_schema_integrity.sql"
 # Valida por separado los datos y consultas opcionales de la demostración 4.1.
 apply_file s2r_rebuild_2 "$repo_dir/database/seeds/001_demo.sql"
 apply_file s2r_rebuild_2 "$repo_dir/database/seeds/003_roles_permisos_fase_4_2.sql"
+# Reaplicar dos veces valida que el script incremental conserva la matriz y no
+# duplica ni el permiso ni sus asignaciones.
+apply_file s2r_rebuild_2 "$repo_dir/supabase/migrations/202611070002_inventory_consume_reservations_permission.sql"
+apply_file s2r_rebuild_2 "$repo_dir/supabase/migrations/202611070002_inventory_consume_reservations_permission.sql"
 apply_file s2r_rebuild_2 "$repo_dir/database/seeds/002_fase_4_1_demo.sql"
 apply_file s2r_rebuild_2 "$repo_dir/database/queries/fase_4_1_reportes.sql" >/dev/null
 apply_file s2r_rebuild_2 "$repo_dir/database/queries/fase_4_1_crud_demo.sql" >/dev/null
@@ -90,6 +94,33 @@ role_matrix="$(docker exec "$container_name" psql --username postgres \
           join public.permiso p using(id_permiso)
           where r.nombre='VENDEDOR' and p.codigo_permiso='REPORTE_FINANCIERO_CONSULTAR'));")"
 test "$role_matrix" = "t|t|t|t|t"
+
+production_permission_matrix="$(docker exec "$container_name" psql --username postgres \
+    --dbname s2r_rebuild_2 --quiet --tuples-only --no-align --command "
+      select concat_ws('|',
+        (select count(*) = 1 from public.permiso
+          where codigo_permiso='INVENTARIO_CONSUMIR_RESERVAS'),
+        exists(select 1 from public.rol r join public.rol_permiso rp using(id_rol)
+          join public.permiso p using(id_permiso)
+          where r.nombre='ADMINISTRADOR'
+            and p.codigo_permiso='INVENTARIO_CONSUMIR_RESERVAS'),
+        exists(select 1 from public.rol r join public.rol_permiso rp using(id_rol)
+          join public.permiso p using(id_permiso)
+          where r.nombre='PRODUCCION'
+            and p.codigo_permiso='INVENTARIO_CONSUMIR_RESERVAS'),
+        not exists(select 1 from public.rol r join public.rol_permiso rp using(id_rol)
+          join public.permiso p using(id_permiso)
+          where r.nombre='PRODUCCION' and p.codigo_permiso='INVENTARIO_GESTIONAR'),
+        not exists(select 1 from public.rol r join public.rol_permiso rp using(id_rol)
+          join public.permiso p using(id_permiso)
+          where r.nombre in ('VENDEDOR','CONTADOR')
+            and p.codigo_permiso='INVENTARIO_CONSUMIR_RESERVAS'),
+        (select count(*) = 2 from public.rol_permiso rp
+          join public.rol r using(id_rol)
+          join public.permiso p using(id_permiso)
+          where r.nombre in ('ADMINISTRADOR','PRODUCCION')
+            and p.codigo_permiso='INVENTARIO_CONSUMIR_RESERVAS'));")"
+test "$production_permission_matrix" = "t|t|t|t|t|t"
 
 catalog_rows="$(docker exec "$container_name" psql --username postgres \
     --dbname s2r_rebuild_1 --quiet --tuples-only --no-align \

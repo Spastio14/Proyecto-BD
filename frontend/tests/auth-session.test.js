@@ -119,3 +119,11 @@ test("la administración 4.4 integra envíos, clientes, escalas, pérdidas y per
   assert.match(source, /perfil\/correo\/solicitar/);
   assert.match(source, /perfil\/correo\/sincronizar/);
 });
+
+test("producción muestra sólo acciones operativas autorizadas", () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "dashboard.js"), "utf8");
+  assert.match(source, /acciones_permitidas/);
+  assert.match(source, /INVENTARIO_CONSUMIR_RESERVAS/);
+  assert.doesNotMatch(source, /<option value="consume">Consumir reserva<\/option>/);
+  assert.match(source, /No hay acciones de producción autorizadas/);
+});
