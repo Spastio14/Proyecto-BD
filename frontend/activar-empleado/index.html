@@ -3,23 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#faf9f6">
   <title>Activar acceso · Doble R</title>
   <link rel="stylesheet" href="../styles.css">
 </head>
-<body class="public-page">
-  <main>
-    <section class="hero">
-      <article class="panel">
-        <p class="eyebrow">Invitación privada</p>
-        <h1>Activar acceso de empleado</h1>
+<body class="public-page activation-page">
+  <a class="skip-link" href="#contenido">Saltar al contenido</a>
+  <header class="public-header compact-header">
+    <a class="brand" href="/app/" aria-label="Doble R, inicio"><span class="brand-mark" aria-hidden="true">RR</span><span class="brand-copy">Doble R<small>Acceso privado del personal</small></span></a>
+  </header>
+  <main id="contenido">
+    <section class="activation-layout">
+      <div class="activation-context"><p class="section-kicker">Invitación privada</p><h1>Activa tu espacio de trabajo</h1><p>Comprueba la invitación enviada por la administración y establece una contraseña personal para continuar.</p></div>
+      <article class="panel activation-panel">
+        <h2>Acceso de empleado</h2>
         <p id="activation-state" aria-live="polite">Verificando la invitación recibida desde Supabase…</p>
         <form id="activation-form" class="form-grid hidden">
-          <label>Nueva contraseña
-            <input name="password" type="password" minlength="8" maxlength="128" autocomplete="new-password" required>
-          </label>
-          <label>Confirmar contraseña
-            <input name="password_confirmation" type="password" minlength="8" maxlength="128" autocomplete="new-password" required>
-          </label>
+          <label>Nueva contraseña<input name="password" type="password" minlength="8" maxlength="128" autocomplete="new-password" required></label>
+          <label>Confirmar contraseña<input name="password_confirmation" type="password" minlength="8" maxlength="128" autocomplete="new-password" required></label>
           <button type="submit">Establecer contraseña y activar</button>
         </form>
         <a class="primary-link hidden" id="continue" href="/app/">Volver al inicio</a>

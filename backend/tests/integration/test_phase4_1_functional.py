@@ -195,7 +195,7 @@ def test_116_reports_and_static_frontend_are_available(api_client_factory, emplo
     assert client.get("/").status_code == 200
     page = client.get("/app/")
     assert page.status_code == 200
-    assert "Sistema de demostración" in page.text
+    assert "Hazlo tuyo. Nosotros lo hacemos real." in page.text
 
 
 def test_117_provider_and_purchase_listing_filters(session, employee):
