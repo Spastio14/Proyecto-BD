@@ -136,6 +136,10 @@ class PaymentRead(ORMModel):
     clave_idem: UUID
 
 
+class PaymentListRead(PaymentRead):
+    codigo_pedido: str
+
+
 class PaymentReject(StrictInput):
     reason: str = Field(min_length=1, max_length=500)
 

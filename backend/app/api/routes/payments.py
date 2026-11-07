@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 from app.api.routes.designs import StorageRouteUnavailable
 from app.core.security import Principal, get_principal
 from app.db.session import get_session
-from app.schemas.api import PaymentRead, PaymentReject, PaymentReport
+from app.models.entities import Pedido
+from app.schemas.api import PaymentListRead, PaymentRead, PaymentReject, PaymentReport
 from app.services.payments import PaymentService
 
 router = APIRouter(prefix="/pagos", tags=["pagos"])
@@ -55,12 +56,28 @@ def reject_payment(
     )
 
 
-@router.get("", response_model=list[PaymentRead])
+@router.get("", response_model=list[PaymentListRead])
 def list_payments(
     principal: Principal = Depends(get_principal),
     session: Session = Depends(get_session),
 ):
-    return PaymentService.list_all(session, principal)
+    payments = PaymentService.list_all(session, principal)
+    order_codes = (
+        dict(
+            session.query(Pedido.id_pedido, Pedido.codigo_pedido)
+            .filter(Pedido.id_pedido.in_({item.id_pedido for item in payments}))
+            .all()
+        )
+        if payments
+        else {}
+    )
+    return [
+        PaymentListRead(
+            **PaymentRead.model_validate(item).model_dump(),
+            codigo_pedido=order_codes[item.id_pedido],
+        )
+        for item in payments
+    ]
 
 
 @router.get("/pedidos/{order_id}", response_model=list[PaymentRead])

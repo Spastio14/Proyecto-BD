@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import Principal
 from app.models.entities import (
+    ArticuloInventariable,
     DetallePedido,
     Envio,
     ReservaInventario,
@@ -56,6 +57,22 @@ class OrderOperationService:
                 .order_by(ReservaInventario.id_articulo)
             )
         )
+        article_names = (
+            dict(
+                session.execute(
+                    select(
+                        ArticuloInventariable.id_articulo,
+                        ArticuloInventariable.nombre,
+                    ).where(
+                        ArticuloInventariable.id_articulo.in_(
+                            {item.id_articulo for item in reservations}
+                        )
+                    )
+                ).all()
+            )
+            if reservations
+            else {}
+        )
         delivery = session.scalar(select(Envio).where(Envio.id_pedido == order_id))
         all_designs_approved = all(
             not row["requiere_produccion"] or row["aprobada"] for row in designs
@@ -92,6 +109,7 @@ class OrderOperationService:
                 "reservas": [
                     {
                         "id_articulo": item.id_articulo,
+                        "articulo": article_names.get(item.id_articulo, "Material"),
                         "cantidad_reservada": item.cantidad_reservada,
                         "cantidad_pendiente": item.cantidad_pendiente,
                         "estado": item.estado,
