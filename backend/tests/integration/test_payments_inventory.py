@@ -12,6 +12,7 @@ from app.domain.money import minimum_advance
 from app.models.entities import (
     ArticuloInventariable,
     HitoPago,
+    RegistroAuditoria,
     ReservaInventario,
     Transaccion,
     VarianteProducto,
@@ -240,3 +241,118 @@ def test_30_failed_confirmation_rolls_back_audit_and_payment(session, customer, 
         session.commit()
     session.rollback()
     assert session.get(Transaccion, payment.id_transaccion).estado_verificacion == "PENDIENTE"
+
+
+def test_31_duplicate_pending_payment_for_same_milestone_is_rejected(session, customer):
+    order = create_order(session, customer)
+    first = report_payment(session, order, customer)
+    with pytest.raises(Conflict, match="pendiente de verificación"):
+        report_payment(session, order, customer)
+    assert first.estado_verificacion == "PENDIENTE"
+    assert (
+        session.scalar(
+            select(func.count())
+            .select_from(Transaccion)
+            .where(
+                Transaccion.id_pedido == order.id_pedido,
+                Transaccion.numero_hito == 1,
+                Transaccion.estado_verificacion == "PENDIENTE",
+            )
+        )
+        == 1
+    )
+
+
+def test_32_financial_summary_tracks_pending_verified_and_zero_balance(session, customer, employee):
+    service = PaymentService()
+    order = create_order(session, customer)
+    advance = report_payment(session, order, customer)
+    pending = service.summary(session, order_id=order.id_pedido, principal=customer)
+    assert pending["anticipo_exigido"] == Decimal("45.00")
+    assert pending["anticipo_pendiente_verificacion"] == Decimal("45.00")
+    assert pending["anticipo_verificado"] == Decimal("0.00")
+    assert pending["saldo_pendiente"] == Decimal("90.00")
+
+    service.confirm(session, payment_id=advance.id_transaccion, principal=employee)
+    balance = service.report(
+        session,
+        order_id=order.id_pedido,
+        milestone_number=2,
+        idempotency_key=uuid4(),
+        method="TRANSFERENCIA",
+        principal=customer,
+    )
+    assert balance.monto_con_signo == Decimal("45.00")
+    service.confirm(session, payment_id=balance.id_transaccion, principal=employee)
+    completed = service.summary(session, order_id=order.id_pedido, principal=customer)
+    assert completed["total_verificado"] == Decimal("90.00")
+    assert completed["saldo_pendiente"] == Decimal("0.00")
+    assert completed["completamente_pagado"] is True
+    assert all(not item["puede_reportar"] for item in completed["hitos"])
+    with pytest.raises(Conflict, match="pagado|completado"):
+        service.report(
+            session,
+            order_id=order.id_pedido,
+            milestone_number=2,
+            idempotency_key=uuid4(),
+            method="TRANSFERENCIA",
+            principal=customer,
+        )
+
+
+def test_33_excessive_payment_is_not_verified(session, customer, employee):
+    order = create_order(session, customer)
+    payment = report_payment(session, order, customer)
+    payment.monto_con_signo = Decimal("45.01")
+    session.flush()
+    with pytest.raises(Conflict, match="supera"):
+        PaymentService().confirm(session, payment_id=payment.id_transaccion, principal=employee)
+    assert payment.estado_verificacion == "PENDIENTE"
+    assert payment.id_empleado_verificador is None
+
+
+def test_34_confirmation_writes_payment_and_order_audit(session, customer, employee):
+    order = create_order(session, customer)
+    payment = report_payment(session, order, customer)
+    PaymentService().confirm(session, payment_id=payment.id_transaccion, principal=employee)
+    actions = set(
+        session.scalars(
+            select(RegistroAuditoria.accion).where(
+                RegistroAuditoria.referencia_objeto.in_(
+                    (str(payment.id_transaccion), order.codigo_pedido)
+                )
+            )
+        )
+    )
+    assert {"VERIFICAR_PAGO", "CAMBIAR_ESTADO_PEDIDO"} <= actions
+
+
+@pytest.mark.concurrency
+def test_35_concurrent_distinct_reports_leave_one_pending_hito(engine, session, customer):
+    order = create_order(session, customer)
+    order_id = order.id_pedido
+    session.commit()
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    barrier = Barrier(2)
+
+    def report() -> str:
+        with factory() as worker:
+            barrier.wait()
+            try:
+                PaymentService().report(
+                    worker,
+                    order_id=order_id,
+                    milestone_number=1,
+                    idempotency_key=uuid4(),
+                    method="TRANSFERENCIA",
+                    principal=customer,
+                )
+                worker.commit()
+                return "created"
+            except Conflict:
+                worker.rollback()
+                return "conflict"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: report(), range(2)))
+    assert sorted(results) == ["conflict", "created"]
