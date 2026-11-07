@@ -12,6 +12,7 @@ from app.models.entities import (
     ArticuloInventariable,
     Compra,
     Envio,
+    HitoPago,
     MovimientoInventario,
     Pedido,
     Proveedor,
@@ -50,10 +51,13 @@ def test_111_quote_and_order_endpoints_are_scoped(api_client_factory, customer):
     )
     assert quote.status_code == 201
     quote_id = quote.json()["id_cotizacion"]
-    assert client.post(
-        f"/api/v1/cotizaciones/{quote_id}/decision",
-        json={"decision": "RECHAZADA", "reason": "Cambió el requerimiento"},
-    ).status_code == 200
+    assert (
+        client.post(
+            f"/api/v1/cotizaciones/{quote_id}/decision",
+            json={"decision": "RECHAZADA", "reason": "Cambió el requerimiento"},
+        ).status_code
+        == 200
+    )
     order = client.post(
         "/api/v1/pedidos",
         json={"lines": [{"variant_id": 1, "quantity": 1}], "delivery_mode": "RETIRO"},
@@ -81,11 +85,14 @@ def test_112_purchase_confirmation_increases_stock_once(session, employee):
     PurchaseService().confirm(session, purchase_id=purchase.id_compra, principal=employee)
     PurchaseService().confirm(session, purchase_id=purchase.id_compra, principal=employee)
     assert session.get(ArticuloInventariable, 1).existencia_actual == initial + Decimal("30.000")
-    assert session.scalar(
-        select(func.count()).select_from(MovimientoInventario).where(
-            MovimientoInventario.id_compra == purchase.id_compra
+    assert (
+        session.scalar(
+            select(func.count())
+            .select_from(MovimientoInventario)
+            .where(MovimientoInventario.id_compra == purchase.id_compra)
         )
-    ) == 1
+        == 1
+    )
 
 
 @pytest.mark.concurrency
@@ -116,11 +123,14 @@ def test_113_concurrent_purchase_confirmation_is_idempotent(engine, session, emp
         assert verification.get(ArticuloInventariable, 1).existencia_actual == initial + Decimal(
             "3.000"
         )
-        assert verification.scalar(
-            select(func.count()).select_from(MovimientoInventario).where(
-                MovimientoInventario.id_compra == purchase_id
+        assert (
+            verification.scalar(
+                select(func.count())
+                .select_from(MovimientoInventario)
+                .where(MovimientoInventario.id_compra == purchase_id)
             )
-        ) == 1
+            == 1
+        )
 
 
 def test_114_purchase_api_validates_permissions_and_relations(
@@ -147,6 +157,8 @@ def test_115_delivery_requires_ready_order_and_closes_history(session, customer,
     order = create_order(session, customer)
     order.modalidad_entrega = "ENVIO"
     order.estado = "LISTO"
+    for milestone in session.scalars(select(HitoPago).where(HitoPago.id_pedido == order.id_pedido)):
+        milestone.estado = "PAGADO"
     delivery = DeliveryService().schedule(
         session,
         order_id=order.id_pedido,

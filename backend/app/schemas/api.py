@@ -145,7 +145,7 @@ class CancelRequest(StrictInput):
 
 
 class OrderTransitionRequest(StrictInput):
-    target: Literal["EN_DISENO", "LISTO"]
+    target: Literal["EN_DISENO"]
     reason: str = Field(min_length=1, max_length=500)
 
 

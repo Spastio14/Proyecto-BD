@@ -237,7 +237,7 @@ class OrderService:
         reason: str,
     ) -> Pedido:
         AuthorizationService.require(session, principal, "PEDIDO_GESTIONAR")
-        if target not in {"EN_DISENO", "LISTO"}:
+        if target != "EN_DISENO":
             raise Conflict("El estado requiere una operación específica")
         return self.transition(
             session,

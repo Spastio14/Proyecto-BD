@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import Conflict, NotFound
 from app.core.security import Principal
-from app.models.entities import AgenciaEnvio, Envio, Pedido
+from app.models.entities import AgenciaEnvio, Envio, HitoPago, Pedido
 from app.repositories.locks import lock_order
 from app.services.audit import AuditService
 from app.services.authorization import AuthorizationService
@@ -89,6 +89,14 @@ class DeliveryService:
             return order
         if order.estado != "LISTO":
             raise Conflict("Sólo un pedido listo puede entregarse")
+        unpaid_milestone = session.scalar(
+            select(HitoPago.numero_hito).where(
+                HitoPago.id_pedido == order_id,
+                HitoPago.estado != "PAGADO",
+            )
+        )
+        if unpaid_milestone is not None:
+            raise Conflict("El pedido debe estar completamente pagado antes de la entrega")
         if order.modalidad_entrega == "ENVIO":
             delivery = session.scalar(
                 select(Envio).where(Envio.id_pedido == order_id).with_for_update()

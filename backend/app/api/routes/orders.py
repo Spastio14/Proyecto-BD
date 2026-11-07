@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.security import Principal, get_principal
 from app.db.session import get_session
 from app.schemas.api import CancelRequest, OrderCreate, OrderRead, OrderTransitionRequest
+from app.services.operations import OrderOperationService
 from app.services.orders import OrderLineInput, OrderService
 
 router = APIRouter(prefix="/pedidos", tags=["pedidos"])
@@ -62,9 +63,7 @@ def order_details(
             "importe": item.importe_pactado,
             "modo_precio": item.modo_precio,
         }
-        for item in OrderService.details_owned(
-            session, order_id=order_id, principal=principal
-        )
+        for item in OrderService.details_owned(session, order_id=order_id, principal=principal)
     ]
 
 
@@ -82,10 +81,17 @@ def order_history(
             "motivo": item.motivo,
             "origen": item.origen_cambio,
         }
-        for item in OrderService.history_owned(
-            session, order_id=order_id, principal=principal
-        )
+        for item in OrderService.history_owned(session, order_id=order_id, principal=principal)
     ]
+
+
+@router.get("/{order_id}/operacion")
+def order_operation(
+    order_id: int,
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    return OrderOperationService.summary(session, order_id=order_id, principal=principal)
 
 
 @router.post("/{order_id}/estado", response_model=OrderRead)
