@@ -76,6 +76,18 @@ class ReportService:
             .group_by(Pedido.estado)
             .order_by(Pedido.estado)
         ).mappings()
+        orders_state_rows = [dict(row) for row in orders_by_state]
+        state_counts = {row["estado"]: row["cantidad"] for row in orders_state_rows}
+        order_indicators = {
+            "nuevos": sum(
+                state_counts.get(state, 0)
+                for state in ("PENDIENTE_PAGO", "PAGADO_PARCIAL", "PAGADO")
+            ),
+            "pendientes_pago": state_counts.get("PENDIENTE_PAGO", 0),
+            "en_diseno": state_counts.get("EN_DISENO", 0),
+            "en_produccion": state_counts.get("EN_PRODUCCION", 0),
+            "listos": state_counts.get("LISTO", 0),
+        }
 
         pending_payments = (
             session.execute(
@@ -237,7 +249,8 @@ class ReportService:
 
         return {
             "periodo_dias": days,
-            "pedidos_por_estado": [dict(row) for row in orders_by_state],
+            "pedidos_por_estado": orders_state_rows,
+            "indicadores_pedidos": order_indicators,
             "pagos_pendientes": dict(pending_payments),
             "compras_confirmadas": dict(confirmed_purchases),
             "stock_bajo": low_stock,

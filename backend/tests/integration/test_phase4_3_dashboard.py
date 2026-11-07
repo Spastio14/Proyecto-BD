@@ -13,6 +13,7 @@ def test_214_dashboard_has_operational_kpis_and_audit(session, employee):
     assert report["periodo_dias"] == 30
     assert {
         "pedidos_por_estado",
+        "indicadores_pedidos",
         "pagos_pendientes",
         "compras_confirmadas",
         "stock_bajo",
@@ -20,6 +21,13 @@ def test_214_dashboard_has_operational_kpis_and_audit(session, employee):
     } <= report.keys()
     assert {"cantidad", "monto"} <= report["pagos_pendientes"].keys()
     assert {"cantidad", "total"} <= report["compras_confirmadas"].keys()
+    assert {
+        "nuevos",
+        "pendientes_pago",
+        "en_diseno",
+        "en_produccion",
+        "listos",
+    } == report["indicadores_pedidos"].keys()
 
 
 def test_215_report_period_is_validated_by_api(api_client_factory, employee):
@@ -37,7 +45,7 @@ def test_217_frontend_uses_guarded_operational_endpoints():
     source = (Path(__file__).resolve().parents[3] / "frontend" / "dashboard.js").read_text(
         encoding="utf-8"
     )
-    assert "/produccion/pedidos/${x.id}/completar" in source
+    assert "/produccion/pedidos/${id}/completar" in source
     assert "/pedidos/${x.id}/operacion" in source
     assert "CATALOGO_GESTIONAR" in source
     assert "<option>LISTO</option>" not in source
