@@ -157,3 +157,15 @@ pérdidas, gastos, retenciones y reembolsos al periodo contable.
 | Pérdida contextual | opciones válidas, pedido/etapa y salida de inventario trazable | `test_loss_options_and_selected_context_are_audited` |
 | Perfil de menor privilegio | esquema estricto de datos personales y correo confirmado por UUID Auth | pruebas de perfil y cambio de correo Fase 4.4 |
 | Modelo conservado | columna nullable incremental en `PERSONA`, sin tablas nuevas | runner estructural: 41 tablas y 64 FK |
+
+## Consumo de reservas de producción — post Fase 4.4
+
+| Regla | Implementación | Evidencia |
+|---|---|---|
+| Permiso mínimo de consumo | `INVENTARIO_CONSUMIR_RESERVAS` sólo se asigna a ADMINISTRADOR y PRODUCCION | migración `202611070002` y prueba de matriz de roles |
+| Administración separada | PRODUCCION conserva consulta y consumo, pero no `INVENTARIO_GESTIONAR` | `test_production_cannot_administer_inventory` |
+| Estado estricto | sólo pedidos `EN_PRODUCCION` aceptan el consumo | prueba parametrizada de estados incompatibles |
+| Consumo exactamente una vez | bloqueo de pedido, reservas y artículos; movimiento previo se reutiliza | `test_concurrent_consumption_discount_is_exactly_once` |
+| Inventario y reserva coherentes | `SALIDA_PRODUCCION`, existencia 18→17 y reserva `AGOTADA/0` | `test_production_can_start_consume_once_and_complete` |
+| Finalización controlada | pedido con reservas pendientes o ausentes no pasa a `LISTO` | pruebas de reservas pendientes y faltantes |
+| Interfaz por estado y permiso | resumen operativo expone acciones permitidas y el panel elimina opciones fijas | prueba frontend `producción muestra sólo acciones operativas autorizadas` |

@@ -34,9 +34,10 @@ insert into public.rol (id_rol, nombre, descripcion, estado)
 values (1, 'ADMINISTRACION', 'Rol ficticio de pruebas', 'ACTIVO')
 on conflict do nothing;
 
-insert into public.permiso (id_permiso, codigo_permiso, descripcion, modulo)
-values (1, 'PEDIDO_GESTIONAR', 'Gestionar pedidos de prueba', 'PEDIDOS')
-on conflict do nothing;
+insert into public.permiso (codigo_permiso, descripcion, modulo)
+values ('PEDIDO_GESTIONAR', 'Gestionar pedidos de prueba', 'PEDIDOS')
+on conflict (codigo_permiso) do update
+set descripcion = excluded.descripcion, modulo = excluded.modulo;
 
 insert into public.asignacion_rol
     (id_asignacion_rol, id_empleado, id_rol, fecha_asignacion, estado)
@@ -44,7 +45,10 @@ values (1, 3, 1, '2026-11-01 14:00:00+00', 'ACTIVA')
 on conflict do nothing;
 
 insert into public.rol_permiso (id_rol, id_permiso)
-values (1, 1)
+select r.id_rol, p.id_permiso
+from public.rol r
+join public.permiso p on p.codigo_permiso = 'PEDIDO_GESTIONAR'
+where r.nombre = 'ADMINISTRACION'
 on conflict do nothing;
 
 insert into public.categoria (id_categoria, nombre, descripcion, estado)

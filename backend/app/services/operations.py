@@ -9,6 +9,7 @@ from app.models.entities import (
     VarianteProducto,
     VersionDiseno,
 )
+from app.services.authorization import AuthorizationService
 from app.services.orders import OrderService
 from app.services.payments import PaymentService
 
@@ -66,6 +67,17 @@ class OrderOperationService:
                 item.estado == "AGOTADA" and item.cantidad_pendiente == 0 for item in reservations
             )
         )
+        active_reservations = any(
+            item.estado == "ACTIVA" and item.cantidad_pendiente > 0 for item in reservations
+        )
+        production_actions, production_message = cls._production_actions(
+            session,
+            principal=principal,
+            state=order.estado,
+            designs_approved=all_designs_approved,
+            active_reservations=active_reservations,
+            reservations_consumed=reservations_consumed,
+        )
         return {
             "pedido": {
                 "id_pedido": order.id_pedido,
@@ -89,8 +101,11 @@ class OrderOperationService:
                 "consumido": reservations_consumed,
             },
             "produccion": {
-                "puede_iniciar": order.estado == "EN_DISENO" and all_designs_approved,
-                "puede_completar": order.estado == "EN_PRODUCCION" and reservations_consumed,
+                "puede_iniciar": "INICIAR_PRODUCCION" in production_actions,
+                "puede_consumir": "CONSUMIR_RESERVAS" in production_actions,
+                "puede_completar": "COMPLETAR_PRODUCCION" in production_actions,
+                "acciones_permitidas": production_actions,
+                "mensaje": production_message,
             },
             "entrega": {
                 "id_envio": delivery.id_envio if delivery else None,
@@ -104,6 +119,40 @@ class OrderOperationService:
                 reservations_consumed,
             ),
         }
+
+    @staticmethod
+    def _production_actions(
+        session: Session,
+        *,
+        principal: Principal,
+        state: str,
+        designs_approved: bool,
+        active_reservations: bool,
+        reservations_consumed: bool,
+    ) -> tuple[list[str], str]:
+        if state == "EN_DISENO":
+            if not designs_approved:
+                return [], "Faltan diseños vigentes aprobados"
+            if not AuthorizationService.has_permission(session, principal, "PRODUCCION_INICIAR"):
+                return [], "No tiene permiso para iniciar producción"
+            return ["INICIAR_PRODUCCION"], "El pedido está listo para iniciar producción"
+        if state == "EN_PRODUCCION" and active_reservations:
+            if not AuthorizationService.has_permission(
+                session, principal, "INVENTARIO_CONSUMIR_RESERVAS"
+            ):
+                return [], "No tiene permiso para consumir reservas de producción"
+            return ["CONSUMIR_RESERVAS"], "Las reservas activas están listas para consumirse"
+        if state == "EN_PRODUCCION" and reservations_consumed:
+            if not AuthorizationService.has_permission(session, principal, "PRODUCCION_INICIAR"):
+                return [], "No tiene permiso para completar producción"
+            return ["COMPLETAR_PRODUCCION"], "Los materiales fueron consumidos; puede completar"
+        if state == "EN_PRODUCCION":
+            return [], "No existen reservas activas válidas para continuar"
+        if state == "LISTO":
+            return [], "La producción ya fue completada"
+        if state in {"CANCELADO", "EXPIRADO", "ENTREGADO"}:
+            return [], "El estado final del pedido no admite operaciones de producción"
+        return [], "El pedido todavía no está en una etapa operativa de producción"
 
     @staticmethod
     def _next_action(

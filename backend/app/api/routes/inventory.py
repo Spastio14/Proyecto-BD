@@ -130,6 +130,6 @@ def consume(
     principal: Principal = Depends(get_principal),
     session: Session = Depends(get_session),
 ) -> dict:
-    AuthorizationService.require(session, principal, "INVENTARIO_GESTIONAR")
+    AuthorizationService.require(session, principal, "INVENTARIO_CONSUMIR_RESERVAS")
     movements = InventoryService().consume_order(session, order_id=order_id, principal=principal)
     return {"movimientos": [movement.id_movimiento for movement in movements]}
