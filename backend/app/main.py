@@ -42,7 +42,7 @@ def create_app(
 
     application = FastAPI(
         title="Sublimación Doble R API",
-        version="4.2.0",
+        version="4.3.0",
         lifespan=lifespan,
     )
     application.state.engine = database_engine

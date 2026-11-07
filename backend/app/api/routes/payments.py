@@ -69,9 +69,16 @@ def list_order_payments(
     principal: Principal = Depends(get_principal),
     session: Session = Depends(get_session),
 ):
-    return PaymentService.list_for_order(
-        session, order_id=order_id, principal=principal
-    )
+    return PaymentService.list_for_order(session, order_id=order_id, principal=principal)
+
+
+@router.get("/pedidos/{order_id}/resumen")
+def order_payment_summary(
+    order_id: int,
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    return PaymentService.summary(session, order_id=order_id, principal=principal)
 
 
 @router.get("/{payment_id}", response_model=PaymentRead)
@@ -80,9 +87,7 @@ def get_payment(
     principal: Principal = Depends(get_principal),
     session: Session = Depends(get_session),
 ):
-    return PaymentService.get_owned(
-        session, payment_id=payment_id, principal=principal
-    )
+    return PaymentService.get_owned(session, payment_id=payment_id, principal=principal)
 
 
 @router.post("/{payment_id}/comprobante", status_code=status.HTTP_201_CREATED)

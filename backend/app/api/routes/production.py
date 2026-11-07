@@ -16,3 +16,12 @@ def start_production(
     session: Session = Depends(get_session),
 ):
     return ProductionService().start(session, order_id=order_id, principal=principal)
+
+
+@router.post("/pedidos/{order_id}/completar", response_model=OrderRead)
+def complete_production(
+    order_id: int,
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+):
+    return ProductionService().complete(session, order_id=order_id, principal=principal)

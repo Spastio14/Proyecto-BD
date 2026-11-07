@@ -64,6 +64,7 @@ apply_file s2r_rebuild_2 "$repo_dir/database/seeds/003_roles_permisos_fase_4_2.s
 apply_file s2r_rebuild_2 "$repo_dir/database/seeds/002_fase_4_1_demo.sql"
 apply_file s2r_rebuild_2 "$repo_dir/database/queries/fase_4_1_reportes.sql" >/dev/null
 apply_file s2r_rebuild_2 "$repo_dir/database/queries/fase_4_1_crud_demo.sql" >/dev/null
+apply_file s2r_rebuild_2 "$repo_dir/database/queries/fase_4_3_verificacion.sql" >/dev/null
 demo_stock="$(docker exec "$container_name" psql --username postgres \
     --dbname s2r_rebuild_2 --quiet --tuples-only --no-align \
     --command "select existencia_actual from public.articulo_inventariable
@@ -78,6 +79,9 @@ role_matrix="$(docker exec "$container_name" psql --username postgres \
           where r.nombre='ADMINISTRADOR' and p.codigo_permiso='EMPLEADO_GESTIONAR'),
         exists(select 1 from public.rol r join public.rol_permiso rp using(id_rol)
           join public.permiso p using(id_permiso)
+          where r.nombre='ADMINISTRADOR' and p.codigo_permiso='CATALOGO_GESTIONAR'),
+        exists(select 1 from public.rol r join public.rol_permiso rp using(id_rol)
+          join public.permiso p using(id_permiso)
           where r.nombre='CONTADOR' and p.codigo_permiso='REPORTE_FINANCIERO_CONSULTAR'),
         not exists(select 1 from public.rol r join public.rol_permiso rp using(id_rol)
           join public.permiso p using(id_permiso)
@@ -85,7 +89,7 @@ role_matrix="$(docker exec "$container_name" psql --username postgres \
         not exists(select 1 from public.rol r join public.rol_permiso rp using(id_rol)
           join public.permiso p using(id_permiso)
           where r.nombre='VENDEDOR' and p.codigo_permiso='REPORTE_FINANCIERO_CONSULTAR'));")"
-test "$role_matrix" = "t|t|t|t"
+test "$role_matrix" = "t|t|t|t|t"
 
 catalog_rows="$(docker exec "$container_name" psql --username postgres \
     --dbname s2r_rebuild_1 --quiet --tuples-only --no-align \
