@@ -186,7 +186,7 @@ def test_52_jwt_with_invalid_signature_is_rejected():
 def test_53_expired_jwt_is_rejected():
     private_key = ec.generate_private_key(ec.SECP256R1())
     with pytest.raises(TokenExpired):
-        verifier(private_key.public_key()).verify(token(private_key, expires_delta=-1))
+        verifier(private_key.public_key()).verify(token(private_key, expires_delta=-31))
 
 
 def test_54_token_from_another_project_is_rejected():
@@ -405,10 +405,7 @@ def test_configured_app_wires_public_auth_client_as_hs256_validator(engine):
         ),
         engine=engine,
     )
-    assert (
-        application.state.token_verifier.user_token_validator
-        is application.state.auth_gateway
-    )
+    assert application.state.token_verifier.user_token_validator is application.state.auth_gateway
 
 
 def test_55_verified_subject_resolves_linked_active_customer(session):

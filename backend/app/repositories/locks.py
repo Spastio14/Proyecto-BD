@@ -23,7 +23,10 @@ def lock_order(session: Session, order_id: int) -> Pedido:
 
 def lock_payment(session: Session, payment_id: int) -> Transaccion:
     payment = session.scalar(
-        select(Transaccion).where(Transaccion.id_transaccion == payment_id).with_for_update()
+        select(Transaccion)
+        .where(Transaccion.id_transaccion == payment_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if payment is None:
         raise NotFound("Transacción no encontrada")

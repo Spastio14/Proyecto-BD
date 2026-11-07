@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -16,6 +18,7 @@ from app.models.entities import (
     Persona,
     Producto,
     Proveedor,
+    RegistroAuditoria,
     ReservaInventario,
     Rol,
     Transaccion,
@@ -26,8 +29,9 @@ from app.services.authorization import AuthorizationService
 
 class ReportService:
     @staticmethod
-    def dashboard(session: Session, principal: Principal) -> dict[str, object]:
+    def dashboard(session: Session, principal: Principal, *, days: int = 30) -> dict[str, object]:
         AuthorizationService.require(session, principal, "REPORTE_FINANCIERO_CONSULTAR")
+        cutoff = datetime.now(UTC) - timedelta(days=days)
 
         sold = session.execute(
             select(
@@ -62,7 +66,43 @@ class ReportService:
             select(func.coalesce(func.sum(Transaccion.monto_con_signo), 0)).where(
                 Transaccion.tipo_transaccion == "PAGO",
                 Transaccion.estado_verificacion == "VERIFICADO",
+                Transaccion.fecha_hora >= cutoff,
             )
+        )
+
+        orders_by_state = session.execute(
+            select(Pedido.estado, func.count(Pedido.id_pedido).label("cantidad"))
+            .where(Pedido.fecha_creacion >= cutoff)
+            .group_by(Pedido.estado)
+            .order_by(Pedido.estado)
+        ).mappings()
+
+        pending_payments = (
+            session.execute(
+                select(
+                    func.count(Transaccion.id_transaccion).label("cantidad"),
+                    func.coalesce(func.sum(Transaccion.monto_con_signo), 0).label("monto"),
+                ).where(
+                    Transaccion.tipo_transaccion == "PAGO",
+                    Transaccion.estado_verificacion == "PENDIENTE",
+                )
+            )
+            .mappings()
+            .one()
+        )
+
+        confirmed_purchases = (
+            session.execute(
+                select(
+                    func.count(Compra.id_compra).label("cantidad"),
+                    func.coalesce(func.sum(Compra.total_compra), 0).label("total"),
+                ).where(
+                    Compra.estado == "CONFIRMADA",
+                    Compra.fecha_compra >= cutoff,
+                )
+            )
+            .mappings()
+            .one()
         )
 
         losses = session.execute(
@@ -71,8 +111,7 @@ class ReportService:
                 ArticuloInventariable.nombre,
                 func.sum(DetallePerdida.cantidad_perdida).label("cantidad_perdida"),
                 func.sum(
-                    DetallePerdida.cantidad_perdida
-                    * DetallePerdida.costo_unitario_historico
+                    DetallePerdida.cantidad_perdida * DetallePerdida.costo_unitario_historico
                 ).label("costo_perdida"),
             )
             .join(
@@ -112,9 +151,7 @@ class ReportService:
                 func.coalesce(supplier_quantities.c.articulos_comprados, 0).label(
                     "articulos_comprados"
                 ),
-                func.coalesce(supplier_totals.c.total_documentado, 0).label(
-                    "total_documentado"
-                ),
+                func.coalesce(supplier_totals.c.total_documentado, 0).label("total_documentado"),
             )
             .outerjoin(
                 supplier_quantities,
@@ -177,15 +214,34 @@ class ReportService:
                 ArticuloInventariable.existencia_actual,
                 ArticuloInventariable.existencia_minima,
                 (
-                    ArticuloInventariable.existencia_actual
-                    - func.coalesce(reserved.c.reservado, 0)
+                    ArticuloInventariable.existencia_actual - func.coalesce(reserved.c.reservado, 0)
                 ).label("disponible"),
             )
             .outerjoin(reserved, reserved.c.id_articulo == ArticuloInventariable.id_articulo)
             .order_by(ArticuloInventariable.nombre)
         ).mappings()
 
+        inventory_rows = [dict(row) for row in inventory]
+        low_stock = [row for row in inventory_rows if row["disponible"] <= row["existencia_minima"]]
+        recent_activity = session.execute(
+            select(
+                RegistroAuditoria.fecha_hora,
+                RegistroAuditoria.accion,
+                RegistroAuditoria.tipo_objeto_afectado,
+                RegistroAuditoria.referencia_objeto,
+                RegistroAuditoria.id_persona_actor,
+            )
+            .order_by(RegistroAuditoria.fecha_hora.desc())
+            .limit(25)
+        ).mappings()
+
         return {
+            "periodo_dias": days,
+            "pedidos_por_estado": [dict(row) for row in orders_by_state],
+            "pagos_pendientes": dict(pending_payments),
+            "compras_confirmadas": dict(confirmed_purchases),
+            "stock_bajo": low_stock,
+            "actividad_reciente": [dict(row) for row in recent_activity],
             "productos_mas_vendidos": [dict(row) for row in sold],
             "pedidos_por_cliente": [dict(row) for row in orders_by_client],
             "ingresos_verificados": verified_income,
@@ -193,5 +249,5 @@ class ReportService:
             "compras_por_proveedor": [dict(row) for row in suppliers],
             "empleados_roles": [dict(row) for row in roles],
             "movimientos_inventario": [dict(row) for row in movements],
-            "inventario": [dict(row) for row in inventory],
+            "inventario": inventory_rows,
         }

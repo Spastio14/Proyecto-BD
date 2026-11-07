@@ -112,3 +112,22 @@ pérdidas, gastos, retenciones y reembolsos al periodo contable.
 | Menor privilegio | matriz DML y permisos separados por operación | casos 123–124 y runner SQL |
 | Permisos dinámicos | asignaciones activas se consultan por petición | caso 128 |
 | Dashboard por perfil | prioridad de roles sin confiar en el navegador | casos 121–122 y 133 |
+
+## Operación integral de Fase 4.3
+
+| Regla | Implementación | Evidencia |
+|---|---|---|
+| Saldo financiero visible | `PaymentService.summary` separa exigido, pendiente, verificado y restante | casos 31–35 de pagos |
+| Un pendiente por hito | bloqueo de pedido e hito antes de reportar | caso 31 y carrera 35 |
+| Catálogo administrativo | `CatalogAdminService` y permiso `CATALOGO_GESTIONAR` | casos 201–202 |
+| Inventario por movimientos | alta en cero, compra o ajuste autorizado y auditado | casos 203 y 207 |
+| Escalas no solapadas | validación de servicio más exclusión PostgreSQL | caso 204 |
+| Receta histórica | composición protegida hasta crear la reserva; reserva como snapshot | caso 205 |
+| Composición completa | requerimientos, faltante y costo por cantidad | casos 205–206 |
+| Fin de producción controlado | reservas agotadas antes de pasar a `LISTO` | caso 208 |
+| Entrega con saldo pagado | todos los hitos deben estar `PAGADO` | caso 209 |
+| Resumen operativo | `/pedidos/{id}/operacion` calcula siguiente acción | casos 210 y 213 |
+| Sin salto genérico a LISTO | transición disponible sólo por `ProductionService.complete` | caso 211 |
+| Tablero administrativo | KPIs de periodo, stock bajo y auditoría reciente | casos 214–215 |
+| Modelo conservado | metadatos ORM contienen exactamente 41 tablas | caso 216 |
+| Interfaz por módulos | navegación y endpoints operativos protegidos | casos 217–218 |

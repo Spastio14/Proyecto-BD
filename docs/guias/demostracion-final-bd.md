@@ -194,9 +194,17 @@ LOSS_ID=$(python -c 'import json; print(json.load(open("/tmp/s2r-perdida.json"))
 curl -fsS -X POST "$API/perdidas/$LOSS_ID/confirmar" \
   -H "Authorization: Bearer $EMPLOYEE_TOKEN" -H "Content-Type: application/json" \
   -d '{"lines":[{"article_id":4101,"quantity":"1.000","damage_description":"Rotura ficticia"}]}'
-curl -fsS -X POST "$API/pedidos/$ORDER_ID/estado" \
-  -H "Authorization: Bearer $EMPLOYEE_TOKEN" -H "Content-Type: application/json" \
-  -d '{"target":"LISTO","reason":"Producción terminada"}'
+curl -fsS -X POST "$API/produccion/pedidos/$ORDER_ID/completar" \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN"
+
+BALANCE_KEY=$(python -c 'import uuid; print(uuid.uuid4())')
+curl -fsS -X POST "$API/pagos/pedidos/$ORDER_ID/reportar" \
+  -H "Authorization: Bearer $CLIENT_TOKEN" -H "Content-Type: application/json" \
+  -d "{\"milestone_number\":2,\"idempotency_key\":\"$BALANCE_KEY\",\"method\":\"TRANSFERENCIA\",\"bank\":\"BANCO-DEMO\",\"reference\":\"SALDO-DEMO\"}" \
+  > /tmp/s2r-saldo.json
+BALANCE_ID=$(python -c 'import json; print(json.load(open("/tmp/s2r-saldo.json"))["id_transaccion"])')
+curl -fsS -X POST "$API/pagos/$BALANCE_ID/confirmar" \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN"
 curl -fsS -X POST "$API/entregas/pedidos/$ORDER_ID/completar" \
   -H "Authorization: Bearer $EMPLOYEE_TOKEN" -H "Content-Type: application/json" \
   -d '{"reason":"Retiro confirmado"}'
@@ -272,7 +280,7 @@ autorizarse en una fase separada con esas decisiones explícitas.
 
 ```bash
 docker rm -f s2r-demo
-rm -f /tmp/s2r-compra.json /tmp/s2r-pedido.json /tmp/s2r-pago.json \
+rm -f /tmp/s2r-compra.json /tmp/s2r-pedido.json /tmp/s2r-pago.json /tmp/s2r-saldo.json \
   /tmp/s2r-perdida.json /tmp/diseno-demo.png
 ```
 
