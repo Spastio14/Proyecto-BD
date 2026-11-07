@@ -126,9 +126,7 @@ class PurchaseService:
         session.flush()
         return detail
 
-    def confirm(
-        self, session: Session, *, purchase_id: int, principal: Principal
-    ) -> Compra:
+    def confirm(self, session: Session, *, purchase_id: int, principal: Principal) -> Compra:
         AuthorizationService.require(session, principal, "COMPRA_AUTORIZAR")
         purchase = self._lock_purchase(session, purchase_id)
         if purchase.estado == "CONFIRMADA":
@@ -202,9 +200,7 @@ class PurchaseService:
         return list(session.scalars(statement))
 
     @staticmethod
-    def details(
-        session: Session, *, purchase_id: int, principal: Principal
-    ) -> list[DetalleCompra]:
+    def details(session: Session, *, purchase_id: int, principal: Principal) -> list[DetalleCompra]:
         AuthorizationService.require(session, principal, "COMPRA_CONSULTAR")
         if session.get(Compra, purchase_id) is None:
             raise NotFound("Compra no encontrada")
@@ -236,8 +232,9 @@ class PurchaseService:
     ) -> DetalleCompra:
         if quantity <= 0 or unit_cost < 0:
             raise Conflict("Cantidad o costo de compra inválido")
-        if session.get(ArticuloInventariable, article_id) is None:
-            raise NotFound("Artículo inventariable no encontrado")
+        article = session.get(ArticuloInventariable, article_id)
+        if article is None or article.estado != "ACTIVO":
+            raise NotFound("Artículo inventariable activo no encontrado")
         number = session.scalar(
             select(func.coalesce(func.max(DetalleCompra.numero_linea), 0)).where(
                 DetalleCompra.id_compra == purchase.id_compra

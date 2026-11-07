@@ -8,6 +8,7 @@ insert into public.permiso (codigo_permiso, descripcion, modulo)
 values
   ('INVENTARIO_CONSULTAR', 'Consultar existencias y disponibilidad', 'INVENTARIO'),
   ('INVENTARIO_GESTIONAR', 'Consumir y ajustar inventario autorizado', 'INVENTARIO'),
+  ('CATALOGO_GESTIONAR', 'Mantener catálogo, precios y composiciones', 'CATALOGO'),
   ('COMPRA_CONSULTAR', 'Consultar compras y sus detalles', 'COMPRAS'),
   ('COMPRA_REGISTRAR', 'Crear borradores y detalles de compras', 'COMPRAS'),
   ('COMPRA_AUTORIZAR', 'Confirmar compras y entradas de inventario', 'COMPRAS'),

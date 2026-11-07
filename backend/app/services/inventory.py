@@ -80,6 +80,180 @@ class InventoryReservationService:
 
 
 class InventoryService:
+    @staticmethod
+    def create_article(
+        session: Session,
+        *,
+        principal: Principal,
+        code: str,
+        name: str,
+        article_type: str,
+        unit: str,
+        minimum_stock: Decimal,
+        reference_cost: Decimal,
+    ) -> ArticuloInventariable:
+        AuthorizationService.require(session, principal, "INVENTARIO_GESTIONAR")
+        normalized_code = code.strip().upper()
+        if (
+            session.scalar(
+                select(ArticuloInventariable.id_articulo).where(
+                    ArticuloInventariable.codigo == normalized_code
+                )
+            )
+            is not None
+        ):
+            raise Conflict("El código de artículo ya existe")
+        article = ArticuloInventariable(
+            codigo=normalized_code,
+            nombre=name.strip(),
+            tipo_articulo=article_type.strip().upper(),
+            unidad_medida=unit,
+            existencia_actual=Decimal("0.000"),
+            existencia_minima=minimum_stock,
+            costo_referencia=reference_cost,
+            estado="ACTIVO",
+        )
+        session.add(article)
+        session.flush()
+        AuditService.record(
+            session,
+            principal=principal,
+            action="CREAR_ARTICULO_INVENTARIO",
+            object_type="ARTICULO_INVENTARIABLE",
+            object_reference=str(article.id_articulo),
+            reason="Alta administrativa con existencia inicial en cero",
+            after={"codigo": article.codigo, "existencia_actual": article.existencia_actual},
+        )
+        return article
+
+    @staticmethod
+    def update_article(
+        session: Session,
+        *,
+        article_id: int,
+        principal: Principal,
+        changes: dict,
+    ) -> ArticuloInventariable:
+        AuthorizationService.require(session, principal, "INVENTARIO_GESTIONAR")
+        article = session.scalar(
+            select(ArticuloInventariable)
+            .where(ArticuloInventariable.id_articulo == article_id)
+            .with_for_update()
+        )
+        if article is None:
+            raise NotFound("Artículo no encontrado")
+        if "code" in changes:
+            code = changes["code"].strip().upper()
+            duplicate = session.scalar(
+                select(ArticuloInventariable.id_articulo).where(
+                    ArticuloInventariable.codigo == code,
+                    ArticuloInventariable.id_articulo != article_id,
+                )
+            )
+            if duplicate is not None:
+                raise Conflict("El código de artículo ya existe")
+            changes["code"] = code
+        mapping = {
+            "code": "codigo",
+            "name": "nombre",
+            "article_type": "tipo_articulo",
+            "unit": "unidad_medida",
+            "minimum_stock": "existencia_minima",
+            "reference_cost": "costo_referencia",
+            "state": "estado",
+        }
+        before = {"codigo": article.codigo, "estado": article.estado}
+        for source, value in changes.items():
+            if source in mapping:
+                setattr(
+                    article, mapping[source], value.strip() if isinstance(value, str) else value
+                )
+        AuditService.record(
+            session,
+            principal=principal,
+            action="ACTUALIZAR_ARTICULO_INVENTARIO",
+            object_type="ARTICULO_INVENTARIABLE",
+            object_reference=str(article_id),
+            reason="Actualización administrativa sin alterar existencias",
+            before=before,
+            after={"codigo": article.codigo, "estado": article.estado},
+        )
+        return article
+
+    @classmethod
+    def adjust(
+        cls,
+        session: Session,
+        *,
+        article_id: int,
+        direction: str,
+        quantity: Decimal,
+        reason: str,
+        observations: str | None,
+        principal: Principal,
+    ) -> MovimientoInventario:
+        AuthorizationService.require(session, principal, "INVENTARIO_GESTIONAR")
+        articles = lock_articles(session, {article_id})
+        if not articles:
+            raise NotFound("Artículo no encontrado")
+        article = articles[0]
+        if article.estado != "ACTIVO":
+            raise Conflict("No se puede ajustar un artículo inactivo")
+        before = article.existencia_actual
+        if direction == "SALIDA":
+            if cls.availability(session, article_id) < quantity:
+                raise InsufficientInventory("El ajuste de salida afectaría existencias reservadas")
+            article.existencia_actual -= quantity
+            movement_type = "SALIDA_AJUSTE"
+        elif direction == "ENTRADA":
+            article.existencia_actual += quantity
+            movement_type = "ENTRADA_AJUSTE"
+        else:
+            raise Conflict("Dirección de ajuste inválida")
+        movement = MovimientoInventario(
+            id_articulo=article_id,
+            id_pedido=None,
+            id_reserva=None,
+            id_compra=None,
+            numero_linea_compra=None,
+            id_empleado=principal.persona_id,
+            fecha_hora=datetime.now(UTC),
+            tipo_movimiento=movement_type,
+            cantidad=quantity,
+            costo_unitario_aplicado=article.costo_referencia,
+            motivo=reason.strip(),
+            observaciones=observations,
+        )
+        session.add(movement)
+        session.flush()
+        AuditService.record(
+            session,
+            principal=principal,
+            action="AJUSTAR_INVENTARIO",
+            object_type="ARTICULO_INVENTARIABLE",
+            object_reference=str(article_id),
+            reason=reason,
+            before={"existencia_actual": before},
+            after={
+                "existencia_actual": article.existencia_actual,
+                "movimiento": movement.id_movimiento,
+                "tipo": movement_type,
+            },
+        )
+        return movement
+
+    @staticmethod
+    def list_movements(
+        session: Session, *, principal: Principal, article_id: int | None = None
+    ) -> list[MovimientoInventario]:
+        AuthorizationService.require(session, principal, "INVENTARIO_CONSULTAR")
+        statement = select(MovimientoInventario).order_by(
+            MovimientoInventario.fecha_hora.desc(), MovimientoInventario.id_movimiento.desc()
+        )
+        if article_id is not None:
+            statement = statement.where(MovimientoInventario.id_articulo == article_id)
+        return list(session.scalars(statement.limit(500)))
+
     def consume_order(
         self, session: Session, *, order_id: int, principal: Principal
     ) -> list[MovimientoInventario]:
@@ -168,18 +342,23 @@ class InventoryService:
     ) -> list[dict[str, object]]:
         AuthorizationService.require(session, principal, "INVENTARIO_CONSULTAR")
         articles = list(
-            session.scalars(
-                select(ArticuloInventariable).order_by(ArticuloInventariable.nombre)
-            )
+            session.scalars(select(ArticuloInventariable).order_by(ArticuloInventariable.nombre))
         )
         return [
             {
                 "id_articulo": article.id_articulo,
                 "codigo": article.codigo,
                 "nombre": article.nombre,
+                "tipo_articulo": article.tipo_articulo,
+                "unidad_medida": article.unidad_medida,
                 "existencia_actual": article.existencia_actual,
                 "existencia_minima": article.existencia_minima,
                 "disponible": cls.availability(session, article.id_articulo),
+                "reservado": article.existencia_actual
+                - cls.availability(session, article.id_articulo),
+                "costo_referencia": article.costo_referencia,
+                "bajo_minimo": cls.availability(session, article.id_articulo)
+                <= article.existencia_minima,
                 "estado": article.estado,
             }
             for article in articles

@@ -149,6 +149,95 @@ class OrderTransitionRequest(StrictInput):
     reason: str = Field(min_length=1, max_length=500)
 
 
+class CategoryCreate(StrictInput):
+    name: str = Field(min_length=1, max_length=180)
+    description: str | None = Field(default=None, max_length=500)
+
+
+class CategoryUpdate(StrictInput):
+    name: str | None = Field(default=None, min_length=1, max_length=180)
+    description: str | None = Field(default=None, max_length=500)
+    state: Literal["ACTIVA", "INACTIVA"] | None = None
+
+
+class ProductCreate(StrictInput):
+    category_id: int = Field(gt=0)
+    name: str = Field(min_length=1, max_length=180)
+    description: str | None = Field(default=None, max_length=500)
+    commercial_information: str = Field(min_length=1, max_length=5000)
+    publication_state: Literal["BORRADOR", "PUBLICADO", "INACTIVO"] = "BORRADOR"
+
+
+class ProductUpdate(StrictInput):
+    category_id: int | None = Field(default=None, gt=0)
+    name: str | None = Field(default=None, min_length=1, max_length=180)
+    description: str | None = Field(default=None, max_length=500)
+    commercial_information: str | None = Field(default=None, min_length=1, max_length=5000)
+    publication_state: Literal["BORRADOR", "PUBLICADO", "INACTIVO"] | None = None
+
+
+class VariantCreate(StrictInput):
+    product_id: int = Field(gt=0)
+    code: str = Field(min_length=1, max_length=64)
+    features: str | None = Field(default=None, max_length=500)
+    retail_price: Decimal = Field(ge=0)
+    requires_production: bool = True
+
+
+class VariantUpdate(StrictInput):
+    product_id: int | None = Field(default=None, gt=0)
+    code: str | None = Field(default=None, min_length=1, max_length=64)
+    features: str | None = Field(default=None, max_length=500)
+    retail_price: Decimal | None = Field(default=None, ge=0)
+    requires_production: bool | None = None
+    state: Literal["ACTIVA", "INACTIVA"] | None = None
+
+
+class PriceScaleUpsert(StrictInput):
+    range_number: int = Field(gt=0)
+    minimum_quantity: int = Field(gt=0)
+    maximum_quantity: int | None = Field(default=None, gt=0)
+    wholesale_unit_price: Decimal = Field(ge=0)
+    state: Literal["ACTIVA", "INACTIVA"] = "ACTIVA"
+
+    @model_validator(mode="after")
+    def validate_range(self):
+        if self.maximum_quantity is not None and self.maximum_quantity < self.minimum_quantity:
+            raise ValueError("maximum_quantity debe ser mayor o igual que minimum_quantity")
+        return self
+
+
+class InventoryArticleCreate(StrictInput):
+    code: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=180)
+    article_type: str = Field(min_length=1, max_length=80)
+    unit: Literal["UNIDAD", "ML", "L", "G", "KG", "M", "M2", "HOJA"]
+    minimum_stock: Decimal = Field(ge=0)
+    reference_cost: Decimal = Field(ge=0)
+
+
+class InventoryArticleUpdate(StrictInput):
+    code: str | None = Field(default=None, min_length=1, max_length=64)
+    name: str | None = Field(default=None, min_length=1, max_length=180)
+    article_type: str | None = Field(default=None, min_length=1, max_length=80)
+    unit: Literal["UNIDAD", "ML", "L", "G", "KG", "M", "M2", "HOJA"] | None = None
+    minimum_stock: Decimal | None = Field(default=None, ge=0)
+    reference_cost: Decimal | None = Field(default=None, ge=0)
+    state: Literal["ACTIVO", "INACTIVO"] | None = None
+
+
+class InventoryAdjustment(StrictInput):
+    direction: Literal["ENTRADA", "SALIDA"]
+    quantity: Decimal = Field(gt=0)
+    reason: str = Field(min_length=3, max_length=500)
+    observations: str | None = Field(default=None, max_length=2000)
+
+
+class CompositionUpsert(StrictInput):
+    standard_quantity: Decimal = Field(gt=0)
+    observations: str = Field(default="", max_length=2000)
+
+
 class ProviderCreate(StrictInput):
     name: str = Field(min_length=1, max_length=180)
     phone: str | None = Field(default=None, max_length=30)
