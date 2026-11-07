@@ -65,6 +65,27 @@ def invite_employee(
     }
 
 
+@router.post("/{employee_id}/reenviar-invitacion")
+def resend_employee_invitation(
+    employee_id: int,
+    request: Request,
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    AuthorizationService.require(session, principal, "EMPLEADO_GESTIONAR")
+    coordinator = getattr(request.app.state, "employee_invitation_coordinator", None)
+    if coordinator is None:
+        raise EmployeeInvitationUnavailable(
+            "El reenvío requiere la integración privada de Supabase en el servidor"
+        )
+    result = coordinator.resend(principal=principal, employee_id=employee_id)
+    return {
+        "id_persona": result.persona_id,
+        "codigo_empleado": result.employee_code,
+        "estado": result.status,
+    }
+
+
 @router.put("/{employee_id}/rol", status_code=status.HTTP_204_NO_CONTENT)
 def assign_role(
     employee_id: int,

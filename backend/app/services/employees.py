@@ -1,10 +1,10 @@
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.core.exceptions import Conflict, NotFound
+from app.core.exceptions import Conflict, DomainError, NotFound
 from app.core.security import Principal, VerifiedAuthIdentity
 from app.integrations.supabase import AuthAdminIdentity, AuthGateway
 from app.models.entities import (
@@ -13,12 +13,36 @@ from app.models.entities import (
     CuentaAcceso,
     Empleado,
     Persona,
+    RegistroAuditoria,
     Rol,
 )
 from app.services.audit import AuditService
 from app.services.authorization import AuthorizationService
 
 ALLOWED_EMPLOYEE_ROLES = frozenset({"ADMINISTRADOR", "CONTADOR", "VENDEDOR", "PRODUCCION"})
+INVITATION_RESEND_COOLDOWN = timedelta(seconds=60)
+INVITATION_EVENT_ACTIONS = frozenset(
+    {
+        "PREPARAR_INVITACION_EMPLEADO",
+        "SOLICITAR_INVITACION_EMPLEADO",
+        "INVITAR_EMPLEADO",
+        "FALLAR_INVITACION_EMPLEADO",
+        "SOLICITAR_REENVIO_INVITACION",
+        "REENVIAR_INVITACION_EMPLEADO",
+        "FALLAR_REENVIO_INVITACION",
+        "ACTIVAR_EMPLEADO",
+    }
+)
+INVITATION_REQUEST_ACTIONS = frozenset(
+    {
+        "SOLICITAR_INVITACION_EMPLEADO",
+        "INVITAR_EMPLEADO",
+        "FALLAR_INVITACION_EMPLEADO",
+        "SOLICITAR_REENVIO_INVITACION",
+        "REENVIAR_INVITACION_EMPLEADO",
+        "FALLAR_REENVIO_INVITACION",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +86,38 @@ class EmployeeService:
                     .order_by(Rol.nombre)
                 )
             )
+            events = list(
+                session.scalars(
+                    select(RegistroAuditoria)
+                    .where(
+                        RegistroAuditoria.tipo_objeto_afectado == "EMPLEADO",
+                        RegistroAuditoria.referencia_objeto == str(employee.id_persona),
+                        RegistroAuditoria.accion.in_(INVITATION_EVENT_ACTIONS),
+                    )
+                    .order_by(RegistroAuditoria.fecha_hora.desc())
+                )
+            )
+            latest = events[0] if events else None
+            latest_request = next(
+                (event for event in events if event.accion in INVITATION_REQUEST_ACTIONS),
+                None,
+            )
+            invitation_date = events[-1].fecha_hora if events else None
+            available_at = (
+                latest_request.fecha_hora + INVITATION_RESEND_COOLDOWN
+                if latest_request
+                else None
+            )
+            can_resend = (
+                employee.estado_laboral == "INACTIVO"
+                and (account is None or account.estado_cuenta == "ACTIVA")
+                and (available_at is None or available_at <= datetime.now(UTC))
+            )
+            activation_status = EmployeeService._activation_status(
+                employee=employee,
+                account=account,
+                latest_action=latest.accion if latest else None,
+            )
             result.append(
                 {
                     "id_persona": employee.id_persona,
@@ -72,10 +128,44 @@ class EmployeeService:
                     "correo": person.correo_electronico,
                     "estado_laboral": employee.estado_laboral,
                     "estado_cuenta": account.estado_cuenta if account else "PENDIENTE_VINCULO",
+                    "estado_activacion": activation_status,
+                    "fecha_invitacion": invitation_date,
+                    "fecha_ultima_solicitud": (
+                        latest_request.fecha_hora if latest_request else None
+                    ),
+                    "reenvio_disponible_desde": available_at,
+                    "puede_reenviar": can_resend,
+                    "acciones_permitidas": [
+                        action
+                        for action, allowed in (
+                            ("REENVIAR_INVITACION", can_resend),
+                            ("CAMBIAR_ROL", employee.estado_laboral != "SUSPENDIDO"),
+                        )
+                        if allowed
+                    ],
                     "roles": roles,
                 }
             )
         return result
+
+    @staticmethod
+    def _activation_status(
+        *, employee: Empleado, account: CuentaAcceso | None, latest_action: str | None
+    ) -> str:
+        if employee.estado_laboral == "SUSPENDIDO" or (
+            account is not None and account.estado_cuenta in {"SUSPENDIDA", "BLOQUEADA"}
+        ):
+            return "SUSPENDIDA"
+        if employee.estado_laboral == "ACTIVO":
+            return "ACTIVA"
+        if latest_action in {
+            "FALLAR_INVITACION_EMPLEADO",
+            "FALLAR_REENVIO_INVITACION",
+        }:
+            return "INVITACION_FALLIDA"
+        if account is not None:
+            return "PENDIENTE_ACTIVACION"
+        return "PENDIENTE_ENVIO"
 
     @staticmethod
     def assign_role(
@@ -156,7 +246,7 @@ class EmployeeInvitationCoordinator:
         capacity: int,
     ) -> EmployeeInviteResult:
         normalized_email = email.strip().lower()
-        employee_id = self._stage(
+        employee_id, created = self._stage(
             principal=principal,
             names=names,
             surnames=surnames,
@@ -171,20 +261,41 @@ class EmployeeInvitationCoordinator:
                 select(CuentaAcceso).where(CuentaAcceso.id_persona == employee_id)
             )
             employee = verification.get(Empleado, employee_id)
-            if existing_account is not None:
+            if not created:
                 return EmployeeInviteResult(
-                    employee_id, employee.codigo_empleado, "INVITACION_YA_REGISTRADA"
+                    employee_id,
+                    employee.codigo_empleado,
+                    "PENDIENTE_ACTIVACION" if existing_account else "PENDIENTE_ENVIO",
                 )
 
-        subject = self.gateway.invite_user(
-            email=normalized_email,
-            redirect_to=self.redirect_to,
+        self._record_event(
+            principal=principal,
+            employee_id=employee_id,
+            action="SOLICITAR_INVITACION_EMPLEADO",
+            reason="Solicitud inicial preparada para Supabase Auth",
+            after={"canal": "INVITACION", "estado": "SOLICITUD_EN_CURSO"},
         )
+        try:
+            subject = self.gateway.invite_user(
+                email=normalized_email,
+                redirect_to=self.redirect_to,
+            )
+        except DomainError as exc:
+            self._record_failure(
+                principal=principal,
+                employee_id=employee_id,
+                action="FALLAR_INVITACION_EMPLEADO",
+                exc=exc,
+            )
+            raise
         with self.factory() as session, session.begin():
             session.execute(
                 text("select pg_advisory_xact_lock(hashtextextended(:key, 0))"),
                 {"key": f"employee-auth:{subject}"},
             )
+            employee = session.get(Empleado, employee_id)
+            if employee is None or employee.estado_laboral != "INACTIVO":
+                raise Conflict("El perfil ya no admite una invitación")
             duplicate = session.scalar(
                 select(CuentaAcceso).where(CuentaAcceso.identificador_autenticacion == subject)
             )
@@ -195,6 +306,8 @@ class EmployeeInvitationCoordinator:
                     CuentaAcceso(
                         id_persona=employee_id,
                         identificador_autenticacion=subject,
+                        # El esquema aprobado exige una fecha. Se actualiza al completar
+                        # la activación y nunca concede acceso mientras EMPLEADO sea INACTIVO.
                         fecha_activacion=datetime.now(UTC),
                         estado_cuenta="ACTIVA",
                         ultimo_acceso=None,
@@ -206,12 +319,101 @@ class EmployeeInvitationCoordinator:
                 action="INVITAR_EMPLEADO",
                 object_type="EMPLEADO",
                 object_reference=str(employee_id),
-                reason="Invitación Auth enviada; activación pendiente",
-                after={"estado_laboral": "INACTIVO"},
+                reason="Supabase aceptó la solicitud de invitación; activación pendiente",
+                after={
+                    "canal": "INVITACION",
+                    "estado": "PENDIENTE_ACTIVACION",
+                    "estado_laboral": "INACTIVO",
+                },
             )
-            employee = session.get(Empleado, employee_id)
             code = employee.codigo_empleado
-        return EmployeeInviteResult(employee_id, code, "INVITACION_ENVIADA")
+        return EmployeeInviteResult(employee_id, code, "PENDIENTE_ACTIVACION")
+
+    def resend(
+        self,
+        *,
+        principal: Principal,
+        employee_id: int,
+    ) -> EmployeeInviteResult:
+        """Solicita un enlace nuevo sin recrear perfiles, roles ni identidades."""
+        with self.factory() as session, session.begin():
+            AuthorizationService.require(session, principal, "EMPLEADO_GESTIONAR")
+            self._lock_invitation(session, employee_id)
+            employee, person, account = self._pending_employee(session, employee_id)
+            self._enforce_resend_cooldown(session, employee_id)
+            channel = "RECUPERACION" if account else "INVITACION"
+            subject = account.identificador_autenticacion if account else None
+            AuditService.record(
+                session,
+                principal=principal,
+                action="SOLICITAR_REENVIO_INVITACION",
+                object_type="EMPLEADO",
+                object_reference=str(employee_id),
+                reason="Administrador solicitó un enlace de activación nuevo",
+                after={"canal": channel, "estado": "SOLICITUD_EN_CURSO"},
+            )
+            email = (person.correo_electronico or "").strip().lower()
+            code = employee.codigo_empleado
+
+        try:
+            if subject:
+                identity = self.gateway.get_user(subject=subject)
+                if identity.subject != subject or identity.email != email:
+                    raise Conflict("La identidad Auth no coincide con la invitación autorizada")
+                self.gateway.send_password_recovery(
+                    email=email,
+                    redirect_to=self.redirect_to,
+                )
+            else:
+                subject = self.gateway.invite_user(
+                    email=email,
+                    redirect_to=self.redirect_to,
+                )
+        except DomainError as exc:
+            self._record_failure(
+                principal=principal,
+                employee_id=employee_id,
+                action="FALLAR_REENVIO_INVITACION",
+                exc=exc,
+            )
+            raise
+
+        with self.factory() as session, session.begin():
+            self._lock_invitation(session, employee_id)
+            employee, person, account = self._pending_employee(session, employee_id)
+            normalized_email = (person.correo_electronico or "").strip().lower()
+            if normalized_email != email:
+                raise Conflict("El correo del empleado cambió durante el reenvío")
+            if account is None:
+                duplicate = session.scalar(
+                    select(CuentaAcceso).where(
+                        CuentaAcceso.identificador_autenticacion == subject
+                    )
+                )
+                if duplicate is not None and duplicate.id_persona != employee_id:
+                    raise Conflict("La identidad Auth ya está vinculada a otra persona")
+                if duplicate is None:
+                    session.add(
+                        CuentaAcceso(
+                            id_persona=employee_id,
+                            identificador_autenticacion=subject,
+                            fecha_activacion=datetime.now(UTC),
+                            estado_cuenta="ACTIVA",
+                            ultimo_acceso=None,
+                        )
+                    )
+            elif account.identificador_autenticacion != subject:
+                raise Conflict("La identidad Auth cambió durante el reenvío")
+            AuditService.record(
+                session,
+                principal=principal,
+                action="REENVIAR_INVITACION_EMPLEADO",
+                object_type="EMPLEADO",
+                object_reference=str(employee_id),
+                reason="Supabase aceptó la solicitud; la entrega del correo queda pendiente",
+                after={"canal": channel, "estado": "PENDIENTE_ACTIVACION"},
+            )
+        return EmployeeInviteResult(employee_id, code, "PENDIENTE_ACTIVACION")
 
     def _stage(
         self,
@@ -224,7 +426,7 @@ class EmployeeInvitationCoordinator:
         document: str | None,
         role_id: int,
         capacity: int,
-    ) -> int:
+    ) -> tuple[int, bool]:
         with self.factory() as session, session.begin():
             AuthorizationService.require(session, principal, "EMPLEADO_GESTIONAR")
             session.execute(
@@ -260,7 +462,7 @@ class EmployeeInvitationCoordinator:
                     raise Conflict(
                         "La invitación pendiente tiene otro rol; resuélvela antes de reintentar"
                     )
-                return employee.id_persona
+                return employee.id_persona, False
             person = Persona(
                 nombres=names.strip(),
                 apellidos=surnames.strip() if surnames else None,
@@ -297,7 +499,107 @@ class EmployeeInvitationCoordinator:
                 reason="Perfil inactivo creado antes de invitar Auth",
                 after={"id_rol": role_id, "estado_laboral": "INACTIVO"},
             )
-            return person.id_persona
+            return person.id_persona, True
+
+    @staticmethod
+    def _lock_invitation(session: Session, employee_id: int) -> None:
+        session.execute(
+            text("select pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+            {"key": f"employee-invitation:{employee_id}"},
+        )
+
+    @staticmethod
+    def _pending_employee(
+        session: Session, employee_id: int
+    ) -> tuple[Empleado, Persona, CuentaAcceso | None]:
+        employee = session.scalar(
+            select(Empleado).where(Empleado.id_persona == employee_id).with_for_update()
+        )
+        if employee is None:
+            raise NotFound("Empleado no encontrado")
+        if employee.estado_laboral == "ACTIVO":
+            raise Conflict("Un empleado activo no admite reenvío de invitación")
+        if employee.estado_laboral != "INACTIVO":
+            raise Conflict("El empleado está suspendido y no admite reenvío")
+        person = session.scalar(
+            select(Persona).where(Persona.id_persona == employee_id).with_for_update()
+        )
+        if person is None or not person.correo_electronico:
+            raise Conflict("El empleado no tiene un correo verificable")
+        if session.get(Cliente, employee_id) is not None:
+            raise Conflict("Una cuenta de cliente no puede activarse como empleado")
+        assignment = session.scalar(
+            select(AsignacionRol).where(
+                AsignacionRol.id_empleado == employee_id,
+                AsignacionRol.estado == "ACTIVA",
+            )
+        )
+        if assignment is None:
+            raise Conflict("La invitación no tiene un rol administrativo activo")
+        account = session.scalar(
+            select(CuentaAcceso)
+            .where(CuentaAcceso.id_persona == employee_id)
+            .with_for_update()
+        )
+        if account is not None and account.estado_cuenta != "ACTIVA":
+            raise Conflict("La cuenta está suspendida o bloqueada")
+        return employee, person, account
+
+    @staticmethod
+    def _enforce_resend_cooldown(session: Session, employee_id: int) -> None:
+        latest = session.scalar(
+            select(RegistroAuditoria)
+            .where(
+                RegistroAuditoria.tipo_objeto_afectado == "EMPLEADO",
+                RegistroAuditoria.referencia_objeto == str(employee_id),
+                RegistroAuditoria.accion.in_(INVITATION_REQUEST_ACTIONS),
+            )
+            .order_by(RegistroAuditoria.fecha_hora.desc())
+            .limit(1)
+        )
+        if latest is None:
+            return
+        available_at = latest.fecha_hora + INVITATION_RESEND_COOLDOWN
+        if available_at > datetime.now(UTC):
+            seconds = max(1, int((available_at - datetime.now(UTC)).total_seconds()) + 1)
+            raise Conflict(f"Espera {seconds} segundos antes de solicitar otro enlace")
+
+    def _record_event(
+        self,
+        *,
+        principal: Principal,
+        employee_id: int,
+        action: str,
+        reason: str,
+        after: dict[str, str],
+    ) -> None:
+        with self.factory() as session, session.begin():
+            self._lock_invitation(session, employee_id)
+            AuditService.record(
+                session,
+                principal=principal,
+                action=action,
+                object_type="EMPLEADO",
+                object_reference=str(employee_id),
+                reason=reason,
+                after=after,
+            )
+
+    def _record_failure(
+        self,
+        *,
+        principal: Principal,
+        employee_id: int,
+        action: str,
+        exc: DomainError,
+    ) -> None:
+        self._record_event(
+            principal=principal,
+            employee_id=employee_id,
+            action=action,
+            reason="Supabase rechazó o no pudo completar la solicitud",
+            after={"estado": "FALLIDA", "codigo_error": exc.code},
+        )
 
     def activate(self, identity: VerifiedAuthIdentity) -> EmployeeInviteResult:
         with self.factory() as session, session.begin():
@@ -356,6 +658,8 @@ class EmployeeInvitationCoordinator:
             if assignment is None:
                 raise Conflict("La invitación no tiene un rol administrativo activo")
             employee.estado_laboral = "ACTIVO"
+            account.estado_cuenta = "ACTIVA"
+            account.fecha_activacion = datetime.now(UTC)
             AuditService.record(
                 session,
                 principal=Principal(person.id_persona, "EMPLEADO"),

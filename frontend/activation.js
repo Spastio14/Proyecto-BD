@@ -25,14 +25,14 @@ async function obtainSession(input) {
   if (input.kind === "token_hash") {
     const session = await api("/auth/intercambiar-invitacion", {
       method: "POST",
-      body: JSON.stringify({ token_hash: input.tokenHash, type: "invite" }),
+      body: JSON.stringify({ token_hash: input.tokenHash, type: input.linkType }),
     });
     return session.access_token;
   }
   if (input.kind === "pkce") {
     const session = await api("/auth/intercambiar-invitacion", {
       method: "POST",
-      body: JSON.stringify({ code: input.code, code_verifier: input.codeVerifier, type: "invite" }),
+      body: JSON.stringify({ code: input.code, code_verifier: input.codeVerifier, type: input.linkType }),
     });
     sessionStorage.removeItem("s2r_pkce_code_verifier");
     return session.access_token;

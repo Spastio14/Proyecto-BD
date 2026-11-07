@@ -9,6 +9,14 @@ from app.services.losses import LossLineInput, LossService
 router = APIRouter(prefix="/perdidas", tags=["perdidas"])
 
 
+@router.get("/opciones")
+def loss_options(
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    return LossService.options(session, principal)
+
+
 @router.get("")
 def list_losses(
     principal: Principal = Depends(get_principal),

@@ -13,6 +13,7 @@ from app.api.routes import (
     orders,
     payments,
     production,
+    profiles,
     purchases,
     quotations,
     reports,
@@ -34,3 +35,4 @@ api_router.include_router(purchases.router)
 api_router.include_router(deliveries.router)
 api_router.include_router(reports.router)
 api_router.include_router(employees.router)
+api_router.include_router(profiles.router)

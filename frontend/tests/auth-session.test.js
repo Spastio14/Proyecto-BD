@@ -71,6 +71,12 @@ test("distingue visita directa, invitación vencida y sesión implícita", () =>
   assert.deepEqual(invitationInput("", "#access_token=signed&type=invite"), {
     kind: "session",
     accessToken: "signed",
+    linkType: "invite",
+  });
+  assert.deepEqual(invitationInput("", "#access_token=recovered&type=recovery"), {
+    kind: "session",
+    accessToken: "recovered",
+    linkType: "recovery",
   });
 });
 
@@ -78,11 +84,38 @@ test("acepta token_hash de invitación y exige verificador para PKCE", () => {
   assert.deepEqual(invitationInput("?token_hash=secret&type=invite", ""), {
     kind: "token_hash",
     tokenHash: "secret",
+    linkType: "invite",
   });
+  assert.deepEqual(invitationInput("?token_hash=renewed&type=recovery", ""), {
+    kind: "token_hash",
+    tokenHash: "renewed",
+    linkType: "recovery",
+  });
+  assert.throws(() => invitationInput("?token_hash=secret&type=signup", ""), /no corresponde/);
   assert.throws(() => invitationInput("?code=auth-code", ""), /PKCE/);
   assert.deepEqual(invitationInput("?code=auth-code", "", "verifier"), {
     kind: "pkce",
     code: "auth-code",
     codeVerifier: "verifier",
+    linkType: "invite",
   });
+});
+
+test("el panel administrativo ofrece reenvío explícito sin afirmar entrega", () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "dashboard.js"), "utf8");
+  assert.match(source, /reenviar-invitacion/);
+  assert.match(source, /La entrega del correo depende del proveedor/);
+  assert.doesNotMatch(source, /correo (fue )?entregado/i);
+});
+
+test("la administración 4.4 integra envíos, clientes, escalas, pérdidas y perfiles", () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "dashboard.js"), "utf8");
+  assert.match(source, /datos-iniciales/);
+  assert.match(source, /condicion-mayorista/);
+  assert.match(source, /Crear escala con rango automático/);
+  assert.doesNotMatch(source, /<input name="range_number"/);
+  assert.match(source, /perdidas\/opciones/);
+  assert.doesNotMatch(source, /moment:"FUERA_PRODUCCION"/);
+  assert.match(source, /perfil\/correo\/solicitar/);
+  assert.match(source, /perfil\/correo\/sincronizar/);
 });

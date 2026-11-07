@@ -131,3 +131,29 @@ pérdidas, gastos, retenciones y reembolsos al periodo contable.
 | Tablero administrativo | KPIs de periodo, stock bajo y auditoría reciente | casos 214–215 |
 | Modelo conservado | metadatos ORM contienen exactamente 41 tablas | caso 216 |
 | Interfaz por módulos | navegación y endpoints operativos protegidos | casos 217–218 |
+
+## Invitaciones de empleados de Fase 4.4
+
+| Regla | Implementación | Evidencia |
+|---|---|---|
+| Perfil pendiente sin acceso | `EMPLEADO.INACTIVO` sigue bloqueado aunque exista JWT y `CUENTA_ACCESO` | `test_pending_employee_cannot_authenticate_protected_requests` |
+| Activación verificada | UUID, correo, rol e invitación pendiente se validan antes de pasar a `ACTIVO` | `test_activation_requires_verified_identity_and_link_cannot_be_reused` |
+| Reenvío sin duplicados | operación explícita usa recuperación o invitación según exista identidad Auth | `test_resend_for_existing_identity_uses_recovery_without_duplicates` y `test_failed_initial_request_can_be_retried_without_duplicate_profile` |
+| Identidad exacta | API administrativa confirma UUID y correo antes de solicitar recuperación | `test_resend_rejects_auth_identity_with_different_email` |
+| Control de abuso | bloqueo asesor por empleado, intervalo local y propagación segura de `429` | `test_resend_rate_limit_blocks_repeated_request_before_supabase` y `test_concurrent_resend_allows_only_one_external_request` |
+| Estados fiables | panel distingue pendiente, activo, suspendido y fallo confirmado sin afirmar entrega | `test_initial_invitation_is_pending_and_never_claims_email_delivery` y prueba frontend |
+| Auditoría | solicitud, aceptación y fallo se registran sin tokens ni contraseñas | `test_failed_resend_is_audited_and_exposed_as_failed_state` |
+| Menor privilegio | sólo `EMPLEADO_GESTIONAR` puede reenviar y activos/suspendidos quedan bloqueados | pruebas del endpoint y `test_resend_is_blocked_for_active_or_suspended_employee` |
+
+## Administración integral de Fase 4.4
+
+| Regla | Implementación | Evidencia |
+|---|---|---|
+| Datos iniciales de envío | contacto habitual desde `PERSONA`; `ENVIO` conserva el snapshot editable | `test_delivery_defaults_use_customer_usual_address_and_remain_editable` y `test_delivery_keeps_edited_recipient_snapshot` |
+| Directorio y ficha de cliente | lista compacta, detalle, pedidos, historial y edición administrativa | `test_customer_directory_is_compact_and_detail_contains_history` |
+| Mayorista elegible | sólo REGISTRADO/EMPRESA, motivo y auditoría; INVITADO rechazado | `test_wholesale_condition_rejects_guests_and_preserves_historical_prices` |
+| Receta comprensible | material, consumo, costos, existencias, capacidad y requerimientos | `test_composition_overview_exposes_material_cost_stock_and_capacity` |
+| Número de escala automático | bloqueo asesor por variante y exclusión PostgreSQL contra solapamiento | pruebas de creación, edición y concurrencia de escalas Fase 4.4 |
+| Pérdida contextual | opciones válidas, pedido/etapa y salida de inventario trazable | `test_loss_options_and_selected_context_are_audited` |
+| Perfil de menor privilegio | esquema estricto de datos personales y correo confirmado por UUID Auth | pruebas de perfil y cambio de correo Fase 4.4 |
+| Modelo conservado | columna nullable incremental en `PERSONA`, sin tablas nuevas | runner estructural: 41 tablas y 64 FK |
