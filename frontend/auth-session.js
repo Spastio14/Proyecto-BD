@@ -75,16 +75,19 @@
       throw new Error(query.get("error_description") || hash.get("error_description") || "Supabase rechazó el enlace de invitación.");
     }
     const accessToken = hash.get("access_token");
-    if (accessToken) return { kind: "session", accessToken };
+    const linkType = query.get("type") || hash.get("type") || "invite";
+    if (!["invite", "recovery"].includes(linkType)) {
+      throw new Error("El enlace no corresponde a una activación de empleado.");
+    }
+    if (accessToken) return { kind: "session", accessToken, linkType };
     const tokenHash = query.get("token_hash");
     if (tokenHash) {
-      if (query.get("type") !== "invite") throw new Error("El enlace no corresponde a una invitación de empleado.");
-      return { kind: "token_hash", tokenHash };
+      return { kind: "token_hash", tokenHash, linkType };
     }
     const code = query.get("code");
     if (code) {
       if (!codeVerifier) throw new Error("El enlace PKCE no pertenece a esta sesión del navegador. Solicita una nueva invitación.");
-      return { kind: "pkce", code, codeVerifier };
+      return { kind: "pkce", code, codeVerifier, linkType };
     }
     throw new Error("Esta página requiere un enlace de invitación enviado por un administrador.");
   }

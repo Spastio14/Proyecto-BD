@@ -20,4 +20,6 @@ real permanece en cada servicio FastAPI. La clave privada de Supabase nunca se
 envía al navegador.
 
 La guía de uso y demostración está en
-`docs/guias/fase-4-2-empleados-roles.md`.
+`docs/guias/fase-4-2-empleados-roles.md` y
+`docs/guias/fase-4-4-invitaciones-empleados.md`. La operación administrativa
+completa se describe en `docs/guias/fase-4-4-administracion.md`.

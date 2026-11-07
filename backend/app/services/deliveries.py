@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import Conflict, NotFound
 from app.core.security import Principal
-from app.models.entities import AgenciaEnvio, Envio, HitoPago, Pedido
+from app.models.entities import AgenciaEnvio, Envio, HitoPago, Pedido, Persona
 from app.repositories.locks import lock_order
 from app.services.audit import AuditService
 from app.services.authorization import AuthorizationService
@@ -14,6 +14,24 @@ from app.services.orders import OrderService
 
 
 class DeliveryService:
+    @staticmethod
+    def defaults(
+        session: Session, *, order_id: int, principal: Principal
+    ) -> dict[str, object]:
+        order = OrderService.get_owned(session, order_id=order_id, principal=principal)
+        person = session.get(Persona, order.id_cliente)
+        if person is None:
+            raise NotFound("El pedido no tiene una persona receptora válida")
+        return {
+            "id_pedido": order.id_pedido,
+            "id_cliente": order.id_cliente,
+            "nombre_receptor": " ".join(
+                value for value in (person.nombres, person.apellidos) if value
+            ),
+            "telefono_receptor": person.telefono_contacto,
+            "direccion_habitual": person.direccion_habitual,
+        }
+
     @staticmethod
     def list_agencies(session: Session, principal: Principal) -> list[AgenciaEnvio]:
         AuthorizationService.require(session, principal, "PEDIDO_GESTIONAR")
@@ -54,9 +72,9 @@ class DeliveryService:
         delivery = Envio(
             id_pedido=order_id,
             id_agencia=agency_id,
-            direccion_entrega=address,
-            nombre_receptor=recipient_name,
-            telefono_receptor=recipient_phone,
+            direccion_entrega=address.strip(),
+            nombre_receptor=recipient_name.strip(),
+            telefono_receptor=recipient_phone.strip() if recipient_phone else None,
             tarifa_acordada=agreed_fee,
             fecha_programada=scheduled_at,
             fecha_entrega_real=None,
@@ -71,7 +89,12 @@ class DeliveryService:
             object_type="ENVIO",
             object_reference=str(delivery.id_envio),
             reason="Entrega registrada para el pedido",
-            after={"id_pedido": order_id, "estado": delivery.estado},
+            after={
+                "id_pedido": order_id,
+                "estado": delivery.estado,
+                "nombre_receptor": delivery.nombre_receptor,
+                "direccion_entrega": delivery.direccion_entrega,
+            },
         )
         return delivery
 

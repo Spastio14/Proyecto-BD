@@ -241,6 +241,45 @@ def test_invitation_token_hash_is_verified_with_public_key(monkeypatch):
     }
 
 
+def test_recovery_token_hash_uses_official_verification_type(monkeypatch):
+    captured = {}
+
+    def fake_post(*args, **kwargs):
+        captured["url"] = args[0]
+        captured.update(kwargs)
+        return response(200, auth_session())
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    client().exchange_invitation(
+        token_hash="secure-recovery-token-hash",
+        verification_type="recovery",
+    )
+    assert captured["json"] == {
+        "token_hash": "secure-recovery-token-hash",
+        "type": "recovery",
+    }
+    assert captured["headers"] == {"apikey": "sb_publishable_example"}
+
+
+def test_employee_recovery_uses_public_key_and_exact_redirect(monkeypatch):
+    captured = {}
+
+    def fake_post(*args, **kwargs):
+        captured["url"] = args[0]
+        captured.update(kwargs)
+        return response(200, {})
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    client().send_password_recovery(
+        email="empleado@example.test",
+        redirect_to="http://127.0.0.1:8000/app/activar-empleado/",
+    )
+    assert captured["headers"] == {"apikey": "sb_publishable_example"}
+    assert captured["json"] == {"email": "empleado@example.test"}
+    assert "redirect_to=http://127.0.0.1:8000/app/activar-empleado/" in captured["url"]
+    assert "sb_secret_example" not in captured["headers"].values()
+
+
 def test_pkce_invitation_code_uses_official_token_exchange(monkeypatch):
     captured = {}
 
@@ -269,6 +308,28 @@ def test_initial_password_uses_user_jwt_and_never_server_secret(monkeypatch):
         "Authorization": "Bearer employee-access-token",
     }
     assert captured["json"] == {"password": "new-password"}
+
+
+def test_email_change_uses_user_jwt_and_public_key(monkeypatch):
+    captured = {}
+
+    def fake_put(*args, **kwargs):
+        captured["url"] = args[0]
+        captured.update(kwargs)
+        return response(200, auth_user(email="nuevo@example.test"))
+
+    monkeypatch.setattr(httpx, "put", fake_put)
+    client().request_email_change(
+        access_token="verified-user-token",
+        new_email="NUEVO@example.test",
+    )
+    assert captured["url"].endswith("/auth/v1/user")
+    assert captured["headers"] == {
+        "apikey": "sb_publishable_example",
+        "Authorization": "Bearer verified-user-token",
+    }
+    assert captured["json"] == {"email": "nuevo@example.test"}
+    assert "sb_secret_example" not in captured["headers"].values()
 
 
 @pytest.mark.parametrize("payload", [{}, {"access_token": "only"}, [], "invalid"])

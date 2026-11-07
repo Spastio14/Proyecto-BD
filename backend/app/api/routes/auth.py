@@ -70,7 +70,10 @@ def exchange_invitation(payload: InvitationExchangeRequest, request: Request) ->
     if gateway is None:
         raise AuthRouteUnavailable("La verificación de invitaciones no está configurada")
     if payload.token_hash is not None:
-        return gateway.exchange_invitation(token_hash=payload.token_hash)
+        return gateway.exchange_invitation(
+            token_hash=payload.token_hash,
+            verification_type=payload.type,
+        )
     return gateway.exchange_code(
         code=payload.code,
         code_verifier=payload.code_verifier,

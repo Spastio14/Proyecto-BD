@@ -31,6 +31,7 @@ class Persona(Base):
     telefono_contacto: Mapped[str | None] = mapped_column(String(30))
     correo_electronico: Mapped[str | None] = mapped_column(String(254))
     documento_identificacion: Mapped[str | None] = mapped_column(String(120))
+    direccion_habitual: Mapped[str | None] = mapped_column(String(500))
 
 
 class CuentaAcceso(Base):

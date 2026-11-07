@@ -65,13 +65,21 @@ class AuthGateway(Protocol):
 
     def invite_user(self, *, email: str, redirect_to: str | None = None) -> str: ...
 
+    def send_password_recovery(
+        self, *, email: str, redirect_to: str | None = None
+    ) -> None: ...
+
     def get_user(self, *, subject: str) -> AuthAdminIdentity: ...
 
-    def exchange_invitation(self, *, token_hash: str) -> dict: ...
+    def exchange_invitation(
+        self, *, token_hash: str, verification_type: str = "invite"
+    ) -> dict: ...
 
     def exchange_code(self, *, code: str, code_verifier: str) -> dict: ...
 
     def update_password(self, *, access_token: str, password: str) -> None: ...
+
+    def request_email_change(self, *, access_token: str, new_email: str) -> None: ...
 
     def validate_access_token(self, *, access_token: str) -> dict[str, str | None]: ...
 
@@ -348,11 +356,15 @@ class SupabaseHTTPClient:
             "email": email.strip().lower() if isinstance(email, str) else None,
         }
 
-    def exchange_invitation(self, *, token_hash: str) -> dict:
+    def exchange_invitation(
+        self, *, token_hash: str, verification_type: str = "invite"
+    ) -> dict:
+        if verification_type not in {"invite", "recovery"}:
+            raise TokenInvalid("El tipo de enlace Auth no está permitido")
         response = self._post(
             f"{self.url.rstrip('/')}/auth/v1/verify",
             headers=self._public_headers(),
-            json={"token_hash": token_hash, "type": "invite"},
+            json={"token_hash": token_hash, "type": verification_type},
             timeout=self.timeout,
         )
         self._raise(response, "la verificación de la invitación")
@@ -390,6 +402,16 @@ class SupabaseHTTPClient:
         )
         self._raise(response, "la definición de la contraseña inicial")
 
+    def request_email_change(self, *, access_token: str, new_email: str) -> None:
+        headers = self._public_headers() | {"Authorization": f"Bearer {access_token}"}
+        response = self._put(
+            f"{self.url.rstrip('/')}/auth/v1/user",
+            headers=headers,
+            json={"email": new_email.strip().lower()},
+            timeout=self.timeout,
+        )
+        self._raise(response, "la solicitud de cambio de correo")
+
     def invite_user(self, *, email: str, redirect_to: str | None = None) -> str:
         endpoint = f"{self.url.rstrip('/')}/auth/v1/invite"
         if redirect_to:
@@ -406,6 +428,20 @@ class SupabaseHTTPClient:
         except ValueError as exc:
             raise ExternalServiceUnavailable("Supabase devolvió una invitación inválida") from exc
         return self._admin_user(payload, requested_email=email).subject
+
+    def send_password_recovery(
+        self, *, email: str, redirect_to: str | None = None
+    ) -> None:
+        endpoint = f"{self.url.rstrip('/')}/auth/v1/recover"
+        if redirect_to:
+            endpoint = f"{endpoint}?redirect_to={quote(redirect_to, safe=':/')}"
+        response = self._post(
+            endpoint,
+            headers=self._public_headers(),
+            json={"email": email},
+            timeout=self.timeout,
+        )
+        self._raise(response, "la recuperación de acceso del empleado")
 
     def get_user(self, *, subject: str) -> AuthAdminIdentity:
         try:

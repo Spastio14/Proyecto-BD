@@ -9,6 +9,8 @@ from app.schemas.api import (
     CategoryCreate,
     CategoryUpdate,
     CompositionUpsert,
+    PriceScaleCreate,
+    PriceScaleUpdate,
     PriceScaleUpsert,
     ProductCreate,
     ProductUpdate,
@@ -208,6 +210,53 @@ def list_scales(
     ]
 
 
+def _scale(row) -> dict:
+    return {
+        "id_variante": row.id_variante,
+        "numero_rango": row.numero_rango,
+        "cantidad_minima": row.cantidad_minima,
+        "cantidad_maxima": row.cantidad_maxima,
+        "precio_unitario_mayorista": row.precio_unitario_mayorista,
+        "estado": row.estado,
+    }
+
+
+@router.post("/admin/variantes/{variant_id}/escalas", status_code=status.HTTP_201_CREATED)
+def create_scale(
+    variant_id: int,
+    payload: PriceScaleCreate,
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> dict:
+    return _scale(
+        CatalogAdminService.create_scale(
+            session,
+            variant_id=variant_id,
+            principal=principal,
+            **payload.model_dump(),
+        )
+    )
+
+
+@router.patch("/admin/variantes/{variant_id}/escalas/{range_number}")
+def update_scale(
+    variant_id: int,
+    range_number: int,
+    payload: PriceScaleUpdate,
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> dict:
+    return _scale(
+        CatalogAdminService.update_scale(
+            session,
+            variant_id=variant_id,
+            number=range_number,
+            principal=principal,
+            changes=payload.model_dump(exclude_unset=True),
+        )
+    )
+
+
 @router.put("/admin/variantes/{variant_id}/escalas/{range_number}")
 def upsert_scale(
     variant_id: int,
@@ -238,17 +287,11 @@ def list_composition(
     principal: Principal = Depends(get_principal),
     session: Session = Depends(get_session),
 ) -> list[dict]:
-    return [
-        {
-            "id_variante": row.id_variante,
-            "id_articulo": row.id_articulo,
-            "cantidad_estandar": row.cantidad_estandar,
-            "observaciones": row.observaciones,
-        }
-        for row in CatalogAdminService.list_composition(
-            session, variant_id=variant_id, principal=principal
-        )
-    ]
+    return CatalogAdminService.composition_overview(
+        session,
+        variant_id=variant_id,
+        principal=principal,
+    )
 
 
 @router.put("/admin/variantes/{variant_id}/composicion/{article_id}")

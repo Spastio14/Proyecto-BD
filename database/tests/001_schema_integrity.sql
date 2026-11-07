@@ -91,7 +91,7 @@ select pg_temp.assert_true(
 with expected(table_name, column_name) as (
     values
       ('persona','telefono_contacto'), ('persona','correo_electronico'),
-      ('persona','documento_identificacion'),
+      ('persona','documento_identificacion'), ('persona','direccion_habitual'),
       ('cuenta_acceso','identificador_autenticacion'),
       ('cuenta_acceso','fecha_activacion'), ('cuenta_acceso','ultimo_acceso'),
       ('cliente','fecha_registro'), ('empleado','capacidad_maxima_asignaciones'),
@@ -137,8 +137,8 @@ with expected(table_name, column_name) as (
      and c.column_name = e.column_name
 )
 select pg_temp.assert_true(
-    (select count(*) = 57 from present),
-    'deben existir los 57 nombres completos conciliados'
+    (select count(*) = 58 from present),
+    'deben existir los 58 nombres completos conciliados'
 );
 
 select pg_temp.assert_true(

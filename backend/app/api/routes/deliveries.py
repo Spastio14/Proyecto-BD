@@ -24,6 +24,19 @@ def list_agencies(
     ]
 
 
+@router.get("/pedidos/{order_id}/datos-iniciales")
+def delivery_defaults(
+    order_id: int,
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    return DeliveryService.defaults(
+        session,
+        order_id=order_id,
+        principal=principal,
+    )
+
+
 @router.post("/pedidos/{order_id}", status_code=status.HTTP_201_CREATED)
 def schedule_delivery(
     order_id: int,

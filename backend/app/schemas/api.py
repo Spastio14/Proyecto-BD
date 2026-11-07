@@ -29,7 +29,7 @@ class LoginRequest(StrictInput):
 
 class InvitationExchangeRequest(StrictInput):
     token_hash: str | None = Field(default=None, min_length=16, max_length=2048)
-    type: Literal["invite"] = "invite"
+    type: Literal["invite", "recovery"] = "invite"
     code: str | None = Field(default=None, min_length=8, max_length=2048)
     code_verifier: str | None = Field(default=None, min_length=32, max_length=256)
 
@@ -207,6 +207,25 @@ class PriceScaleUpsert(StrictInput):
         return self
 
 
+class PriceScaleCreate(StrictInput):
+    minimum_quantity: int = Field(gt=0)
+    maximum_quantity: int | None = Field(default=None, gt=0)
+    wholesale_unit_price: Decimal = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_range(self):
+        if self.maximum_quantity is not None and self.maximum_quantity < self.minimum_quantity:
+            raise ValueError("maximum_quantity debe ser mayor o igual que minimum_quantity")
+        return self
+
+
+class PriceScaleUpdate(StrictInput):
+    minimum_quantity: int | None = Field(default=None, gt=0)
+    maximum_quantity: int | None = Field(default=None, gt=0)
+    wholesale_unit_price: Decimal | None = Field(default=None, ge=0)
+    state: Literal["ACTIVA", "INACTIVA"] | None = None
+
+
 class InventoryArticleCreate(StrictInput):
     code: str = Field(min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=180)
@@ -289,8 +308,20 @@ class DesignDecision(StrictInput):
 
 
 class LossCreate(StrictInput):
-    moment: str
-    incident_type: str
+    moment: Literal[
+        "ANTES_PRODUCCION",
+        "DURANTE_PRODUCCION",
+        "DESPUES_PRODUCCION",
+        "FUERA_PRODUCCION",
+    ]
+    incident_type: Literal[
+        "ROTURA_ARTICULO",
+        "IMPRESION_FALLIDA",
+        "SUBLIMACION_DEFECTUOSA",
+        "DESPERDICIO_INSUMO",
+        "DANO_ALMACENAMIENTO",
+        "OTRO",
+    ]
     reason: str = Field(min_length=1, max_length=500)
     order_id: int | None = Field(default=None, gt=0)
     stage_id: int | None = Field(default=None, gt=0)
@@ -305,3 +336,32 @@ class LossLine(StrictInput):
 
 class LossConfirm(StrictInput):
     lines: list[LossLine] = Field(min_length=1)
+
+
+class CustomerAdminUpdate(StrictInput):
+    names: str | None = Field(default=None, min_length=1, max_length=120)
+    surnames: str | None = Field(default=None, max_length=120)
+    phone: str | None = Field(default=None, max_length=30)
+    document: str | None = Field(default=None, max_length=120)
+    usual_address: str | None = Field(default=None, max_length=500)
+
+
+class WholesaleConditionUpdate(StrictInput):
+    enabled: bool
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class ProfileUpdate(StrictInput):
+    names: str | None = Field(default=None, min_length=1, max_length=120)
+    surnames: str | None = Field(default=None, max_length=120)
+    phone: str | None = Field(default=None, max_length=30)
+    document: str | None = Field(default=None, max_length=120)
+    usual_address: str | None = Field(default=None, max_length=500)
+
+
+class EmailChangeRequest(StrictInput):
+    new_email: str = Field(
+        min_length=3,
+        max_length=254,
+        pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$",
+    )

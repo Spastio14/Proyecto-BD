@@ -7,7 +7,13 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import Conflict, InsufficientInventory, NotFound
 from app.core.security import Principal
-from app.models.entities import DetallePerdida, MovimientoInventario, Perdida
+from app.models.entities import (
+    DetallePerdida,
+    EtapaProceso,
+    MovimientoInventario,
+    Pedido,
+    Perdida,
+)
 from app.repositories.locks import lock_articles
 from app.services.audit import AuditService
 from app.services.authorization import AuthorizationService
@@ -34,6 +40,20 @@ class LossService:
     MOMENTS = frozenset(
         {"ANTES_PRODUCCION", "DURANTE_PRODUCCION", "DESPUES_PRODUCCION", "FUERA_PRODUCCION"}
     )
+    TYPE_LABELS = {
+        "ROTURA_ARTICULO": "Rotura de artículo",
+        "IMPRESION_FALLIDA": "Impresión fallida",
+        "SUBLIMACION_DEFECTUOSA": "Sublimación defectuosa",
+        "DESPERDICIO_INSUMO": "Desperdicio de insumo",
+        "DANO_ALMACENAMIENTO": "Daño en almacenamiento",
+        "OTRO": "Otro",
+    }
+    MOMENT_LABELS = {
+        "ANTES_PRODUCCION": "Antes de producción",
+        "DURANTE_PRODUCCION": "Durante producción",
+        "DESPUES_PRODUCCION": "Después de producción",
+        "FUERA_PRODUCCION": "Fuera de producción",
+    }
 
     def report(
         self,
@@ -54,6 +74,14 @@ class LossService:
             raise Conflict("La pérdida requiere un motivo")
         if moment == "FUERA_PRODUCCION" and stage_id is not None:
             raise Conflict("Una pérdida fuera de producción no lleva etapa")
+        if order_id is not None and session.get(Pedido, order_id) is None:
+            raise NotFound("Pedido relacionado no encontrado")
+        if stage_id is not None:
+            stage = session.get(EtapaProceso, stage_id)
+            if stage is None or stage.estado != "ACTIVA":
+                raise NotFound("Etapa activa no encontrada")
+            if order_id is None:
+                raise Conflict("Una etapa requiere indicar el pedido relacionado")
         loss = Perdida(
             id_pedido=order_id,
             id_empleado_reporta=principal.persona_id,
@@ -67,7 +95,47 @@ class LossService:
         )
         session.add(loss)
         session.flush()
+        AuditService.record(
+            session,
+            principal=principal,
+            action="REPORTAR_PERDIDA",
+            object_type="PERDIDA",
+            object_reference=str(loss.id_perdida),
+            reason=loss.motivo,
+            after={
+                "momento": moment,
+                "tipo": incident_type,
+                "id_pedido": order_id,
+                "id_etapa": stage_id,
+                "estado": "REPORTADA",
+            },
+        )
         return loss
+
+    @classmethod
+    def options(cls, session: Session, principal: Principal) -> dict[str, object]:
+        AuthorizationService.require(session, principal, "PERDIDA_REGISTRAR")
+        stages = list(
+            session.scalars(
+                select(EtapaProceso)
+                .where(EtapaProceso.estado == "ACTIVA")
+                .order_by(EtapaProceso.orden_referencia)
+            )
+        )
+        return {
+            "momentos": [
+                {"codigo": code, "nombre": cls.MOMENT_LABELS[code]}
+                for code in sorted(cls.MOMENTS)
+            ],
+            "tipos": [
+                {"codigo": code, "nombre": cls.TYPE_LABELS[code]}
+                for code in sorted(cls.TYPES)
+            ],
+            "etapas": [
+                {"id_etapa": stage.id_etapa, "nombre": stage.nombre}
+                for stage in stages
+            ],
+        }
 
     def confirm(
         self,

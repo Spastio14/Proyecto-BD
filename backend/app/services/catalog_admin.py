@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from sqlalchemy import exists, select
+from sqlalchemy import exists, func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import Conflict, NotFound
@@ -201,6 +201,7 @@ class CatalogAdminService:
     ) -> EscalaPrecio:
         cls._authorize(session, principal)
         cls._variant(session, variant_id)
+        cls._lock_scales(session, variant_id)
         number = data["range_number"]
         if data["state"] == "ACTIVA":
             cls._ensure_scale_does_not_overlap(
@@ -224,6 +225,81 @@ class CatalogAdminService:
         return scale
 
     @classmethod
+    def create_scale(
+        cls, session: Session, *, variant_id: int, principal: Principal, **data
+    ) -> EscalaPrecio:
+        cls._authorize(session, principal)
+        cls._variant(session, variant_id)
+        cls._lock_scales(session, variant_id)
+        number = (
+            session.scalar(
+                select(func.max(EscalaPrecio.numero_rango)).where(
+                    EscalaPrecio.id_variante == variant_id
+                )
+            )
+            or 0
+        ) + 1
+        return cls.upsert_scale(
+            session,
+            variant_id=variant_id,
+            principal=principal,
+            range_number=number,
+            minimum_quantity=data["minimum_quantity"],
+            maximum_quantity=data["maximum_quantity"],
+            wholesale_unit_price=data["wholesale_unit_price"],
+            state="ACTIVA",
+        )
+
+    @classmethod
+    def update_scale(
+        cls,
+        session: Session,
+        *,
+        variant_id: int,
+        number: int,
+        principal: Principal,
+        changes: dict[str, object],
+    ) -> EscalaPrecio:
+        cls._authorize(session, principal)
+        cls._variant(session, variant_id)
+        cls._lock_scales(session, variant_id)
+        scale = session.scalar(
+            select(EscalaPrecio)
+            .where(
+                EscalaPrecio.id_variante == variant_id,
+                EscalaPrecio.numero_rango == number,
+            )
+            .with_for_update()
+        )
+        if scale is None:
+            raise NotFound("Escala mayorista no encontrada")
+        minimum_value = changes.get("minimum_quantity")
+        minimum = int(minimum_value) if minimum_value is not None else scale.cantidad_minima
+        maximum = (
+            changes["maximum_quantity"]
+            if "maximum_quantity" in changes
+            else scale.cantidad_maxima
+        )
+        maximum = int(maximum) if maximum is not None else None
+        price_value = changes.get("wholesale_unit_price")
+        price = (
+            price_value if price_value is not None else scale.precio_unitario_mayorista
+        )
+        state = str(changes.get("state") or scale.estado)
+        if maximum is not None and maximum < minimum:
+            raise Conflict("La cantidad máxima debe ser mayor o igual que la mínima")
+        return cls.upsert_scale(
+            session,
+            variant_id=variant_id,
+            principal=principal,
+            range_number=number,
+            minimum_quantity=minimum,
+            maximum_quantity=maximum,
+            wholesale_unit_price=price,
+            state=state,
+        )
+
+    @classmethod
     def list_composition(
         cls, session: Session, *, variant_id: int, principal: Principal
     ) -> list[ComposicionProducto]:
@@ -236,6 +312,39 @@ class CatalogAdminService:
                 .order_by(ComposicionProducto.id_articulo)
             )
         )
+
+    @classmethod
+    def composition_overview(
+        cls, session: Session, *, variant_id: int, principal: Principal
+    ) -> list[dict[str, object]]:
+        composition = cls.list_composition(
+            session,
+            variant_id=variant_id,
+            principal=principal,
+        )
+        result: list[dict[str, object]] = []
+        for row in composition:
+            article = session.get(ArticuloInventariable, row.id_articulo)
+            available = InventoryService.availability(session, row.id_articulo)
+            result.append(
+                {
+                    "id_variante": row.id_variante,
+                    "id_articulo": row.id_articulo,
+                    "codigo": article.codigo,
+                    "material": article.nombre,
+                    "unidad_medida": article.unidad_medida,
+                    "cantidad_estandar": row.cantidad_estandar,
+                    "costo_referencia": article.costo_referencia,
+                    "costo_estandar": money(
+                        row.cantidad_estandar * article.costo_referencia
+                    ),
+                    "existencia_fisica": article.existencia_actual,
+                    "disponible": available,
+                    "unidades_posibles": int(available // row.cantidad_estandar),
+                    "observaciones": row.observaciones,
+                }
+            )
+        return result
 
     @classmethod
     def upsert_composition(
@@ -388,6 +497,13 @@ class CatalogAdminService:
             other_upper = scale.cantidad_maxima or 2_147_483_647
             if minimum <= other_upper and scale.cantidad_minima <= upper:
                 raise Conflict("El rango mayorista se solapa con una escala activa")
+
+    @staticmethod
+    def _lock_scales(session: Session, variant_id: int) -> None:
+        session.execute(
+            text("select pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+            {"key": f"catalog-scale:{variant_id}"},
+        )
 
     @staticmethod
     def _ensure_recipe_editable(session: Session, variant_id: int) -> None:
