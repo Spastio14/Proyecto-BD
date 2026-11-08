@@ -185,6 +185,7 @@ class PortalService:
                     pagado=item["monto_verificado"],
                     pendiente_verificacion=item["monto_pendiente_verificacion"],
                     saldo=item["monto_restante"],
+                    disponible_reportar=item["monto_disponible_reportar"],
                     estado=item["estado"],
                     puede_reportar=item["puede_reportar"],
                 )
@@ -264,11 +265,14 @@ class PortalService:
             )
             result.extend(
                 PortalPayment(
+                    id_transaccion=payment.id_transaccion,
                     pedido=order.codigo_pedido,
                     fecha=payment.fecha_hora,
                     monto=payment.monto_con_signo,
                     estado=payment.estado_verificacion,
                     metodo=payment.metodo_pago,
+                    banco_origen=payment.banco_origen,
+                    referencia=payment.referencia_bancaria,
                 )
                 for payment in payments
                 if payment.tipo_transaccion == "PAGO"
@@ -281,12 +285,22 @@ class PortalService:
         quotes = cls.list_quotes(session, principal)
         payments = cls.list_payments(session, principal)
         active = [order for order in orders if order.estado in ACTIVE_ORDER_STATES]
+        client = session.get(Cliente, principal.persona_id)
+        active_limit = 1 if client and client.tipo_cliente == "INVITADO" else 2
         return PortalSummary(
             pedidos_activos=len(active),
             cotizaciones_pendientes=sum(quote.estado == "EMITIDA" for quote in quotes),
             pagos_pendientes=sum(payment.estado == "PENDIENTE" for payment in payments),
             pedidos_listos=sum(order.estado == "LISTO" for order in orders),
             saldo_total=money(sum((order.saldo_pendiente for order in active), Decimal(0))),
+            limite_pedidos_activos=active_limit,
+            puede_crear_pedido=len(active) < active_limit,
+            motivo_bloqueo_pedido=(
+                f"Alcanzaste el límite de {active_limit} pedido(s) activo(s). "
+                "Finaliza o cancela uno antes de crear otro."
+                if len(active) >= active_limit
+                else None
+            ),
             pedido_destacado=active[0] if active else None,
         )
 

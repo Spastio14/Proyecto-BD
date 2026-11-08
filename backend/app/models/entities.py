@@ -285,13 +285,49 @@ class Transaccion(Base):
     tipo_transaccion: Mapped[str] = mapped_column(String(80))
     monto_con_signo: Mapped[Decimal] = mapped_column(money)
     metodo_pago: Mapped[str] = mapped_column(String(80))
+    banco_origen: Mapped[str | None] = mapped_column(String(120))
     banco_receptor: Mapped[str | None] = mapped_column(String(120))
     referencia_bancaria: Mapped[str | None] = mapped_column(String(120))
     estado_verificacion: Mapped[str] = mapped_column(String(80))
+    fecha_verificacion: Mapped[datetime | None] = mapped_column(instant)
     clave_idem: Mapped[UUID] = mapped_column(Uuid)
     ruta_comprobante: Mapped[str | None] = mapped_column(String(1000))
     comprobante_mime: Mapped[str | None] = mapped_column(String(100))
     comprobante_tamano_bytes: Mapped[int | None] = mapped_column(BigInteger)
+
+
+class AplicacionTransaccionHito(Base):
+    __tablename__ = "aplicacion_transaccion_hito"
+    id_transaccion: Mapped[int] = mapped_column(
+        ForeignKey("transaccion.id_transaccion"), primary_key=True
+    )
+    id_pedido: Mapped[int] = mapped_column(ForeignKey("pedido.id_pedido"))
+    numero_hito: Mapped[int] = mapped_column(Integer, primary_key=True)
+    monto_aplicado: Mapped[Decimal] = mapped_column(money)
+
+
+class Caja(Base):
+    __tablename__ = "caja"
+    id_caja: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id_empleado_apertura: Mapped[int] = mapped_column(ForeignKey("empleado.id_persona"))
+    id_empleado_cierre: Mapped[int | None] = mapped_column(ForeignKey("empleado.id_persona"))
+    fecha_apertura: Mapped[datetime] = mapped_column(instant)
+    fecha_cierre: Mapped[datetime | None] = mapped_column(instant)
+    saldo_inicial: Mapped[Decimal] = mapped_column(money)
+    saldo_cierre_declarado: Mapped[Decimal | None] = mapped_column(money)
+    estado: Mapped[str] = mapped_column(String(20))
+
+
+class MovimientoCaja(Base):
+    __tablename__ = "movimiento_caja"
+    id_movimiento_caja: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id_caja: Mapped[int] = mapped_column(ForeignKey("caja.id_caja"))
+    id_transaccion: Mapped[int] = mapped_column(ForeignKey("transaccion.id_transaccion"))
+    id_empleado: Mapped[int] = mapped_column(ForeignKey("empleado.id_persona"))
+    fecha_hora: Mapped[datetime] = mapped_column(instant)
+    tipo_movimiento: Mapped[str] = mapped_column(String(40))
+    monto: Mapped[Decimal] = mapped_column(money)
+    folio_recibo: Mapped[str] = mapped_column(String(80))
 
 
 class ReservaInventario(Base):

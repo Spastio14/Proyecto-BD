@@ -209,6 +209,13 @@ values
      '10000000-0000-4000-8000-000000000003')
 on conflict do nothing;
 
+insert into public.aplicacion_transaccion_hito
+    (id_transaccion, id_pedido, numero_hito, monto_aplicado)
+values
+    (1, 1, 1, 85.00),
+    (2, 2, 1, 45.00)
+on conflict do nothing;
+
 insert into public.proveedor (id_proveedor, nombre, telefono, correo, direccion, estado)
 values (1, 'Proveedor Demostración', '2222-0001', 'proveedor@example.test',
         'Managua, Nicaragua', 'ACTIVO')

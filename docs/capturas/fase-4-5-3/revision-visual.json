@@ -1,0 +1,17 @@
+{
+  "fecha": "2026-11-07",
+  "entorno": "Chromium headless local",
+  "datos": "Demostración ficticia; sin datos personales ni conexiones remotas",
+  "vistas": [
+    {
+      "archivo": "cliente-pagos-escritorio.png",
+      "viewport": "1440x1000",
+      "resultado": "Formulario, saldo, operación individual e importes completos visibles"
+    },
+    {
+      "archivo": "cliente-pagos-movil.png",
+      "viewport": "390x844",
+      "resultado": "Formulario apilado, navegación horizontal y contenido sin pérdida funcional"
+    }
+  ]
+}

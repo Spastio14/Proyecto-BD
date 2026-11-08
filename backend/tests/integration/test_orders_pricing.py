@@ -48,19 +48,19 @@ def test_04_guest_cannot_have_two_active_orders(session, guest):
 
 def test_05_registered_cannot_create_third_pending_order(session, customer):
     create_order(session, customer)
-    create_order(session, customer)
     with pytest.raises(Conflict, match="dos pedidos"):
         create_order(session, customer)
 
 
-def test_06_paid_registered_orders_do_not_count_toward_limit(session, customer):
+def test_06_paid_and_production_orders_count_toward_limit(session, customer):
+    session.get(Pedido, 1).estado = "ENTREGADO"
     first = create_order(session, customer)
     second = create_order(session, customer)
     first.estado = "PAGADO"
     second.estado = "EN_PRODUCCION"
     session.flush()
-    third = create_order(session, customer)
-    assert third.estado == "PENDIENTE_PAGO"
+    with pytest.raises(Conflict, match="dos pedidos activos"):
+        create_order(session, customer)
 
 
 @pytest.mark.concurrency

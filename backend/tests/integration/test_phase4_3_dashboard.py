@@ -38,8 +38,13 @@ def test_215_report_period_is_validated_by_api(api_client_factory, employee):
     assert client.get("/api/v1/reportes/resumen?days=3651").status_code == 422
 
 
-def test_216_phase_4_3_keeps_exactly_41_tables():
-    assert len(Base.metadata.tables) == 41
+def test_216_payment_extensions_add_three_normalized_tables():
+    assert len(Base.metadata.tables) == 44
+    assert {
+        "aplicacion_transaccion_hito",
+        "caja",
+        "movimiento_caja",
+    } <= set(Base.metadata.tables)
 
 
 def test_217_frontend_uses_guarded_operational_endpoints():

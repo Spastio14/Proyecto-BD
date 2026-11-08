@@ -187,11 +187,14 @@ class OrderService:
             .select_from(Pedido)
             .where(
                 Pedido.id_cliente == client_id,
-                Pedido.estado == "PENDIENTE_PAGO",
+                Pedido.estado.in_(ACTIVE_GUEST_STATES),
             )
         )
         if (count or 0) >= 2:
-            raise Conflict("El cliente ya tiene dos pedidos pendientes de pago")
+            raise Conflict(
+                "El cliente ya tiene dos pedidos activos; "
+                "finaliza o cancela uno antes de crear otro"
+            )
 
     @staticmethod
     def get_owned(session: Session, *, order_id: int, principal: Principal) -> Pedido:

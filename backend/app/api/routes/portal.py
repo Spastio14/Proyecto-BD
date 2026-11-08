@@ -1,3 +1,5 @@
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
@@ -202,6 +204,7 @@ def payments(
 def report_payment(
     code: str,
     payload: PaymentReport,
+    request: Request,
     principal: Principal = Depends(get_principal),
     session: Session = Depends(get_session),
 ):
@@ -211,15 +214,41 @@ def report_payment(
         order_id=order.id_pedido,
         milestone_number=payload.milestone_number,
         idempotency_key=payload.idempotency_key,
+        amount=payload.amount,
+        payment_scope=payload.payment_scope,
         method=payload.method,
         bank=payload.bank,
+        bank_origin=payload.bank_origin,
+        bank_receiver=payload.bank_receiver,
         reference=payload.reference,
         principal=principal,
     )
+    financial = PaymentService.summary(
+        session, order_id=order.id_pedido, principal=principal
+    )
+    message = (
+        "Hola, Sublimación Doble R. Acabo de reportar una transferencia de "
+        f"C${payment.monto_con_signo:,.2f} para el pedido {order.codigo_pedido}. "
+        f"Banco: {payment.banco_origen}. Referencia bancaria: "
+        f"{payment.referencia_bancaria}. Envío el comprobante para su revisión."
+    )
+    whatsapp_number = request.app.state.settings.business_whatsapp_number
     return PortalPaymentReport(
+        id_transaccion=payment.id_transaccion,
         pedido=order.codigo_pedido,
+        fecha_reporte=payment.fecha_hora,
         monto=payment.monto_con_signo,
         estado=payment.estado_verificacion,
+        total_verificado=financial["total_verificado"],
+        saldo_pendiente=financial["saldo_pendiente"],
+        banco_origen=payment.banco_origen or "",
+        referencia=payment.referencia_bancaria or "",
+        mensaje_whatsapp=message,
+        whatsapp_url=(
+            f"https://wa.me/{whatsapp_number}?text={quote(message)}"
+            if whatsapp_number
+            else None
+        ),
     )
 
 

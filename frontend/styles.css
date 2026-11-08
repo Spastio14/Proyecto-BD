@@ -156,13 +156,13 @@ textarea { min-height: 110px; resize: vertical; }
 
 /* Shells autenticados */
 .dashboard { min-height: 100vh; display: grid; grid-template-columns: 248px minmax(0, 1fr); background: #f5f4f1; }
-.sidebar { position: sticky; top: 0; display: flex; height: 100vh; flex-direction: column; padding: 26px 18px 20px; border-right: 1px solid var(--line); background: var(--surface); }
+.sidebar { position: sticky; top: 0; display: flex; height: 100dvh; min-height: 0; flex-direction: column; padding: 26px 18px 20px; border-right: 1px solid var(--line); background: var(--surface); overflow: hidden; }
 .sidebar .brand { margin: 0 8px 30px; }
-.sidebar nav { display: grid; gap: 3px; }
+.sidebar nav { display: grid; min-height: 0; gap: 3px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .sidebar nav a { display: flex; min-height: 42px; align-items: center; border-radius: var(--radius-control); padding: 9px 12px; color: var(--ink-soft); font-size: .9rem; font-weight: 540; }
 .sidebar nav a:hover { background: var(--paper); color: var(--ink); }
 .sidebar nav a.active { background: var(--brand-soft); color: var(--brand-strong); font-weight: 650; }
-.sidebar footer { margin-top: auto; padding-top: 20px; }
+.sidebar footer { flex: 0 0 auto; margin-top: auto; padding-top: 20px; }
 .sidebar footer button { width: 100%; }
 .workspace { min-width: 0; }
 .workspace-header { position: sticky; top: 0; z-index: 12; display: flex; min-height: 72px; align-items: center; justify-content: space-between; gap: 20px; padding: 12px 30px; border-bottom: 1px solid var(--line); background: rgb(255 255 255 / 94%); backdrop-filter: blur(12px); }
@@ -177,7 +177,7 @@ textarea { min-height: 110px; resize: vertical; }
 .metric + .metric { padding-left: 22px; }
 .metric:last-child { border-right: 0; }
 .metric span { display: block; min-height: 2.6em; margin-bottom: 5px; color: var(--muted); font-size: .78rem; }
-.metric strong { display: block; overflow: hidden; font-size: clamp(1.6rem, 2.8vw, 2.25rem); font-variant-numeric: tabular-nums; font-weight: 620; letter-spacing: -.045em; text-overflow: ellipsis; }
+.metric strong { display: block; overflow-wrap: anywhere; font-size: clamp(1.6rem, 2.8vw, 2.25rem); font-variant-numeric: tabular-nums; font-weight: 620; letter-spacing: -.045em; }
 .metric.attention strong { color: var(--brand-strong); }
 .operations-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; }
 .operations-grid section { min-width: 0; }
@@ -343,7 +343,7 @@ dd { margin: 0; }
   .dashboard { display: block; }
   .sidebar { position: relative; height: auto; padding: 16px; }
   .sidebar .brand { margin: 0 0 14px; }
-  .sidebar nav { display: flex; overflow-x: auto; padding-bottom: 5px; }
+  .sidebar nav { display: flex; overflow-x: auto; overflow-y: hidden; padding-bottom: 5px; }
   .sidebar nav a { flex: 0 0 auto; white-space: nowrap; }
   .sidebar footer { margin-top: 12px; padding-top: 0; }
   .sidebar footer button { width: auto; }
