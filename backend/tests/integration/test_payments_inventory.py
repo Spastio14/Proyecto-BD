@@ -34,7 +34,7 @@ def report_payment(session, order, principal):
         method="TRANSFERENCIA",
         principal=principal,
         bank="BANCO-TEST",
-        reference="REF-TEST",
+        reference=f"REF-{order.id_pedido}-{uuid4().hex}",
     )
 
 
@@ -219,6 +219,8 @@ def test_29_payment_report_is_idempotent(session, customer):
         idempotency_key=key,
         method="TRANSFERENCIA",
         principal=customer,
+        bank="BANCO-TEST",
+        reference="IDEM-001",
     )
     second = service.report(
         session,
@@ -227,6 +229,8 @@ def test_29_payment_report_is_idempotent(session, customer):
         idempotency_key=key,
         method="TRANSFERENCIA",
         principal=customer,
+        bank="BANCO-TEST",
+        reference="IDEM-001",
     )
     assert second.id_transaccion == first.id_transaccion
 
@@ -244,12 +248,32 @@ def test_30_failed_confirmation_rolls_back_audit_and_payment(session, customer, 
     assert session.get(Transaccion, payment.id_transaccion).estado_verificacion == "PENDIENTE"
 
 
-def test_31_duplicate_pending_payment_for_same_milestone_is_rejected(session, customer):
+def test_31_multiple_pending_payments_fit_within_same_milestone(session, customer):
     order = create_order(session, customer)
-    first = report_payment(session, order, customer)
-    with pytest.raises(Conflict, match="pendiente de verificación"):
-        report_payment(session, order, customer)
-    assert first.estado_verificacion == "PENDIENTE"
+    service = PaymentService()
+    first = service.report(
+        session,
+        order_id=order.id_pedido,
+        milestone_number=1,
+        amount=Decimal("20.00"),
+        idempotency_key=uuid4(),
+        method="TRANSFERENCIA",
+        principal=customer,
+        bank="BANCO-TEST",
+        reference="PARCIAL-001",
+    )
+    second = service.report(
+        session,
+        order_id=order.id_pedido,
+        milestone_number=1,
+        amount=Decimal("25.00"),
+        idempotency_key=uuid4(),
+        method="TRANSFERENCIA",
+        principal=customer,
+        bank="BANCO-TEST",
+        reference="PARCIAL-002",
+    )
+    assert first.estado_verificacion == second.estado_verificacion == "PENDIENTE"
     assert (
         session.scalar(
             select(func.count())
@@ -260,7 +284,7 @@ def test_31_duplicate_pending_payment_for_same_milestone_is_rejected(session, cu
                 Transaccion.estado_verificacion == "PENDIENTE",
             )
         )
-        == 1
+        == 2
     )
 
 
@@ -282,6 +306,8 @@ def test_32_financial_summary_tracks_pending_verified_and_zero_balance(session, 
         idempotency_key=uuid4(),
         method="TRANSFERENCIA",
         principal=customer,
+        bank="BANCO-TEST",
+        reference="SALDO-001",
     )
     assert balance.monto_con_signo == Decimal("45.00")
     service.confirm(session, payment_id=balance.id_transaccion, principal=employee)
@@ -290,7 +316,7 @@ def test_32_financial_summary_tracks_pending_verified_and_zero_balance(session, 
     assert completed["saldo_pendiente"] == Decimal("0.00")
     assert completed["completamente_pagado"] is True
     assert all(not item["puede_reportar"] for item in completed["hitos"])
-    with pytest.raises(Conflict, match="pagado|completado"):
+    with pytest.raises(Conflict, match="importe|pagado|completado"):
         service.report(
             session,
             order_id=order.id_pedido,
@@ -298,6 +324,8 @@ def test_32_financial_summary_tracks_pending_verified_and_zero_balance(session, 
             idempotency_key=uuid4(),
             method="TRANSFERENCIA",
             principal=customer,
+            bank="BANCO-TEST",
+            reference="SALDO-002",
         )
 
 
@@ -306,7 +334,7 @@ def test_33_excessive_payment_is_not_verified(session, customer, employee):
     payment = report_payment(session, order, customer)
     payment.monto_con_signo = Decimal("45.01")
     session.flush()
-    with pytest.raises(Conflict, match="supera"):
+    with pytest.raises(Conflict, match="distribución|supera"):
         PaymentService().confirm(session, payment_id=payment.id_transaccion, principal=employee)
     assert payment.estado_verificacion == "PENDIENTE"
     assert payment.id_empleado_verificador is None
@@ -347,6 +375,9 @@ def test_35_concurrent_distinct_reports_leave_one_pending_hito(engine, session, 
                     idempotency_key=uuid4(),
                     method="TRANSFERENCIA",
                     principal=customer,
+                    bank="BANCO-TEST",
+                    reference=f"CONCURRENT-{uuid4().hex}",
+                    amount=Decimal("30.00"),
                 )
                 worker.commit()
                 return "created"

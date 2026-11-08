@@ -317,7 +317,7 @@ def test_possible_employee_duplicates_are_reported_without_automatic_changes(
     }
 
 
-def test_active_operational_orders_exclude_delivered_and_schema_keeps_41_tables(
+def test_active_operational_orders_exclude_delivered_and_schema_has_payment_extensions(
     api_client_factory, employee, session
 ):
     session.get(Pedido, 2).estado = "ENTREGADO"
@@ -342,7 +342,7 @@ def test_active_operational_orders_exclude_delivered_and_schema_keeps_41_tables(
             "where table_schema='public' and table_type='BASE TABLE'"
         )
     )
-    assert table_count == 41
+    assert table_count == 44
 
 
 def test_frontend_contract_contains_store_search_design_and_pos_flows():

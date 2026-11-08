@@ -140,10 +140,14 @@ class QuoteDecision(StrictInput):
 
 
 class PaymentReport(StrictInput):
-    milestone_number: int = Field(gt=0)
+    milestone_number: int | None = Field(default=None, gt=0)
     idempotency_key: UUID
-    method: Literal["EFECTIVO", "TRANSFERENCIA", "TARJETA", "OTRO"]
+    amount: Decimal | None = Field(default=None, gt=0)
+    payment_scope: Literal["ANTICIPO", "SALDO", "TOTAL"] | None = None
+    method: Literal["TRANSFERENCIA"]
     bank: str | None = None
+    bank_origin: str | None = Field(default=None, max_length=120)
+    bank_receiver: str | None = Field(default=None, max_length=120)
     reference: str | None = None
 
 
@@ -152,16 +156,40 @@ class PaymentRead(ORMModel):
     id_pedido: int
     numero_hito: int | None
     monto_con_signo: Decimal
+    metodo_pago: str
+    banco_origen: str | None
+    banco_receptor: str | None
+    referencia_bancaria: str | None
     estado_verificacion: str
+    id_empleado_verificador: int | None
+    fecha_hora: datetime
+    fecha_verificacion: datetime | None
     clave_idem: UUID
 
 
 class PaymentListRead(PaymentRead):
     codigo_pedido: str
+    tipo_abono: str
+    folio_caja: str | None = None
 
 
 class PaymentReject(StrictInput):
     reason: str = Field(min_length=1, max_length=500)
+
+
+class CashRegisterOpen(StrictInput):
+    opening_amount: Decimal = Field(ge=0)
+
+
+class CashRegisterClose(StrictInput):
+    closing_amount: Decimal = Field(ge=0)
+
+
+class CashPaymentCreate(StrictInput):
+    cash_register_id: int = Field(gt=0)
+    amount: Decimal = Field(gt=0)
+    payment_scope: Literal["ANTICIPO", "SALDO", "TOTAL"]
+    idempotency_key: UUID
 
 
 class CancelRequest(StrictInput):

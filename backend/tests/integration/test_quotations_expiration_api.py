@@ -193,6 +193,8 @@ def test_50_later_balance_never_regresses_production_state(session, customer, em
         idempotency_key=uuid4(),
         method="TRANSFERENCIA",
         principal=customer,
+        bank_origin="BANCO-TEST",
+        reference="PRODUCCION-SALDO-001",
     )
     PaymentService().confirm(session, payment_id=balance.id_transaccion, principal=employee)
     assert order.estado == "EN_PRODUCCION"

@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     storage_product_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024)
     storage_signed_url_ttl: int = Field(default=300, ge=30, le=3600)
     employee_invite_redirect_url: str | None = None
+    business_whatsapp_number: str | None = Field(default=None, pattern=r"^[1-9][0-9]{7,14}$")
     log_level: str = "INFO"
 
     model_config = SettingsConfigDict(

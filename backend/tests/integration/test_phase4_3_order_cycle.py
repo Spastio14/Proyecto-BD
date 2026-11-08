@@ -86,6 +86,8 @@ def test_209_delivery_requires_verified_balance(session, customer, employee):
         idempotency_key=uuid4(),
         method="TRANSFERENCIA",
         principal=customer,
+        bank_origin="BANCO-TEST",
+        reference="CICLO-SALDO-001",
     )
     PaymentService().confirm(session, payment_id=balance.id_transaccion, principal=employee)
     delivered = DeliveryService().complete(

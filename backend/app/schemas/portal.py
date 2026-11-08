@@ -26,6 +26,7 @@ class PortalPaymentMilestone(BaseModel):
     pagado: Decimal
     pendiente_verificacion: Decimal
     saldo: Decimal
+    disponible_reportar: Decimal
     estado: str
     puede_reportar: bool
 
@@ -60,11 +61,14 @@ class PortalQuote(BaseModel):
 
 
 class PortalPayment(BaseModel):
+    id_transaccion: int
     pedido: str
     fecha: datetime
     monto: Decimal
     estado: str
     metodo: str
+    banco_origen: str | None = None
+    referencia: str | None = None
 
 
 class PortalSummary(BaseModel):
@@ -73,6 +77,9 @@ class PortalSummary(BaseModel):
     pagos_pendientes: int
     pedidos_listos: int
     saldo_total: Decimal
+    limite_pedidos_activos: int
+    puede_crear_pedido: bool
+    motivo_bloqueo_pedido: str | None = None
     pedido_destacado: PortalOrder | None = None
 
 
@@ -98,6 +105,14 @@ class PortalPricePreview(BaseModel):
 
 
 class PortalPaymentReport(BaseModel):
+    id_transaccion: int
     pedido: str
+    fecha_reporte: datetime
     monto: Decimal
     estado: str
+    total_verificado: Decimal
+    saldo_pendiente: Decimal
+    banco_origen: str
+    referencia: str
+    mensaje_whatsapp: str
+    whatsapp_url: str | None = None

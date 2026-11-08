@@ -4,8 +4,22 @@ from sqlalchemy.orm import Session
 from app.api.routes.designs import StorageRouteUnavailable
 from app.core.security import Principal, get_principal
 from app.db.session import get_session
-from app.models.entities import Pedido
-from app.schemas.api import PaymentListRead, PaymentRead, PaymentReject, PaymentReport
+from app.models.entities import (
+    AplicacionTransaccionHito,
+    Caja,
+    HitoPago,
+    MovimientoCaja,
+    Pedido,
+)
+from app.schemas.api import (
+    CashPaymentCreate,
+    CashRegisterClose,
+    CashRegisterOpen,
+    PaymentListRead,
+    PaymentRead,
+    PaymentReject,
+    PaymentReport,
+)
 from app.services.payments import PaymentService
 
 router = APIRouter(prefix="/pagos", tags=["pagos"])
@@ -25,8 +39,12 @@ def report_payment(
         order_id=order_id,
         milestone_number=payload.milestone_number,
         idempotency_key=payload.idempotency_key,
+        amount=payload.amount,
+        payment_scope=payload.payment_scope,
         method=payload.method,
         bank=payload.bank,
+        bank_origin=payload.bank_origin,
+        bank_receiver=payload.bank_receiver,
         reference=payload.reference,
         principal=principal,
     )
@@ -71,10 +89,43 @@ def list_payments(
         if payments
         else {}
     )
+    payment_ids = {item.id_transaccion for item in payments}
+    allocation_rows = (
+        session.query(
+            AplicacionTransaccionHito.id_transaccion,
+            HitoPago.tipo_hito,
+        )
+        .join(
+            HitoPago,
+            (HitoPago.id_pedido == AplicacionTransaccionHito.id_pedido)
+            & (HitoPago.numero_hito == AplicacionTransaccionHito.numero_hito),
+        )
+        .filter(AplicacionTransaccionHito.id_transaccion.in_(payment_ids))
+        .all()
+        if payment_ids
+        else []
+    )
+    allocation_types: dict[int, list[str]] = {}
+    for payment_id, milestone_type in allocation_rows:
+        allocation_types.setdefault(payment_id, []).append(milestone_type)
+    receipt_folios = (
+        dict(
+            session.query(MovimientoCaja.id_transaccion, MovimientoCaja.folio_recibo)
+            .filter(MovimientoCaja.id_transaccion.in_(payment_ids))
+            .all()
+        )
+        if payment_ids
+        else {}
+    )
     return [
         PaymentListRead(
             **PaymentRead.model_validate(item).model_dump(),
             codigo_pedido=order_codes[item.id_pedido],
+            tipo_abono=(
+                " + ".join(allocation_types.get(item.id_transaccion, []))
+                or "SIN_DISTRIBUCION"
+            ),
+            folio_caja=receipt_folios.get(item.id_transaccion),
         )
         for item in payments
     ]
@@ -96,6 +147,82 @@ def order_payment_summary(
     session: Session = Depends(get_session),
 ) -> dict[str, object]:
     return PaymentService.summary(session, order_id=order_id, principal=principal)
+
+
+@router.post("/cajas/abrir", status_code=status.HTTP_201_CREATED)
+def open_cash_register(
+    payload: CashRegisterOpen,
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    register = PaymentService().open_cash_register(
+        session, opening_amount=payload.opening_amount, principal=principal
+    )
+    return {
+        "id_caja": register.id_caja,
+        "estado": register.estado,
+        "saldo_inicial": register.saldo_inicial,
+        "fecha_apertura": register.fecha_apertura,
+    }
+
+
+@router.get("/cajas/abierta")
+def current_cash_register(
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> dict[str, object] | None:
+    from app.services.authorization import AuthorizationService
+
+    AuthorizationService.require(session, principal, "PAGO_VERIFICAR")
+    register = session.query(Caja).filter(Caja.estado == "ABIERTA").one_or_none()
+    if register is None:
+        return None
+    return {
+        "id_caja": register.id_caja,
+        "estado": register.estado,
+        "saldo_inicial": register.saldo_inicial,
+        "fecha_apertura": register.fecha_apertura,
+    }
+
+
+@router.post("/cajas/{cash_register_id}/cerrar")
+def close_cash_register(
+    cash_register_id: int,
+    payload: CashRegisterClose,
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    register = PaymentService().close_cash_register(
+        session,
+        cash_register_id=cash_register_id,
+        closing_amount=payload.closing_amount,
+        principal=principal,
+    )
+    return {"id_caja": register.id_caja, "estado": register.estado}
+
+
+@router.post("/pedidos/{order_id}/efectivo", status_code=status.HTTP_201_CREATED)
+def register_cash_payment(
+    order_id: int,
+    payload: CashPaymentCreate,
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    movement = PaymentService().register_cash_payment(
+        session,
+        order_id=order_id,
+        cash_register_id=payload.cash_register_id,
+        amount=payload.amount,
+        payment_scope=payload.payment_scope,
+        idempotency_key=payload.idempotency_key,
+        principal=principal,
+    )
+    return {
+        "id_movimiento_caja": movement.id_movimiento_caja,
+        "id_transaccion": movement.id_transaccion,
+        "folio_recibo": movement.folio_recibo,
+        "monto": movement.monto,
+    }
 
 
 @router.get("/{payment_id}", response_model=PaymentRead)

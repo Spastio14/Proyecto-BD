@@ -12,7 +12,6 @@ FORBIDDEN_CLIENT_KEYS = {
     "id_persona",
     "id_pedido",
     "id_cotizacion",
-    "id_transaccion",
     "id_articulo",
     "clave_idem",
     "costo_unitario",

@@ -1,5 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const presentation = require("../presentation.js");
 
 test("traduce estados y acciones del negocio de forma centralizada", () => {
@@ -50,5 +52,21 @@ test("omite diseño y producción cuando el pedido no requiere esas etapas", () 
   });
   assert.equal(customized.find((stage) => stage.label === "Diseño").current, true);
   assert.equal(customized.length, 6);
+});
+
+test("los pagos nuevos sólo ofrecen transferencia y efectivo", () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "dashboard.js"), "utf8");
+  assert.match(source, /Transferencia bancaria/);
+  assert.match(source, /Efectivo en caja/);
+  assert.doesNotMatch(source, /option value="TARJETA"/);
+  assert.doesNotMatch(source, /option value="OTRO"/);
+  assert.match(source, /Adjunta manualmente una captura/);
+});
+
+test("el sidebar mantiene navegación y cierre accesibles con desplazamiento", () => {
+  const styles = fs.readFileSync(path.join(__dirname, "..", "styles.css"), "utf8");
+  assert.match(styles, /\.sidebar[^}]*height: 100dvh/);
+  assert.match(styles, /\.sidebar nav[^}]*overflow-y: auto/);
+  assert.match(styles, /\.sidebar footer[^}]*flex: 0 0 auto/);
 });
 

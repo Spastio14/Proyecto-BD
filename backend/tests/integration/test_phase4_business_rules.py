@@ -143,6 +143,8 @@ def test_86_concurrent_payment_reports_share_one_idempotent_result(engine, sessi
                     idempotency_key=key,
                     method="TRANSFERENCIA",
                     principal=customer,
+                    bank_origin="BANCO-TEST",
+                    reference="IDEMPOTENCIA-CONCURRENTE-001",
                 )
                 worker.commit()
                 return "ok", payment.id_transaccion

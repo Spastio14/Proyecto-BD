@@ -591,6 +591,8 @@ def test_67_receipt_upload_is_structurally_linked_to_transaction(engine, custome
             idempotency_key=uuid4(),
             method="TRANSFERENCIA",
             principal=customer,
+            bank_origin="BANCO-TEST",
+            reference="COMPROBANTE-ESTRUCTURAL-001",
         )
         payment_id = payment.id_transaccion
     gateway = FakeGateway()
@@ -618,6 +620,8 @@ def test_68_receipt_cannot_be_silently_replaced(engine, customer):
             idempotency_key=uuid4(),
             method="TRANSFERENCIA",
             principal=customer,
+            bank_origin="BANCO-TEST",
+            reference="COMPROBANTE-REEMPLAZO-001",
         )
         payment.ruta_comprobante = "transacciones/existente.pdf"
         payment.comprobante_mime = "application/pdf"
@@ -725,6 +729,8 @@ def test_74_receipt_url_is_private_to_order_owner(engine, customer, guest):
             idempotency_key=uuid4(),
             method="TRANSFERENCIA",
             principal=customer,
+            bank_origin="BANCO-TEST",
+            reference="COMPROBANTE-PRIVADO-001",
         )
         payment.ruta_comprobante = "transacciones/privado/comprobante.pdf"
         payment.comprobante_mime = "application/pdf"
