@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.security import Principal
 from app.models.entities import (
     ArticuloInventariable,
+    ComposicionProducto,
     DetallePedido,
     Envio,
     ReservaInventario,
@@ -21,7 +22,11 @@ class OrderOperationService:
         order = OrderService.get_owned(session, order_id=order_id, principal=principal)
         payment = PaymentService.summary(session, order_id=order_id, principal=principal)
         production_lines = session.execute(
-            select(DetallePedido.numero_linea, VarianteProducto.requiere_produccion)
+            select(
+                DetallePedido.numero_linea,
+                DetallePedido.id_variante,
+                VarianteProducto.requiere_produccion,
+            )
             .join(
                 VarianteProducto,
                 VarianteProducto.id_variante == DetallePedido.id_variante,
@@ -30,7 +35,7 @@ class OrderOperationService:
             .order_by(DetallePedido.numero_linea)
         ).all()
         designs = []
-        for line_number, requires_production in production_lines:
+        for line_number, _, requires_production in production_lines:
             latest = session.scalar(
                 select(func.max(VersionDiseno.numero_version)).where(
                     VersionDiseno.id_pedido == order_id,
@@ -78,6 +83,23 @@ class OrderOperationService:
             not row["requiere_produccion"] or row["aprobada"] for row in designs
         )
         requires_materials = any(row["requiere_produccion"] for row in designs)
+        required_variant_ids = [
+            variant_id
+            for _, variant_id, requires_production in production_lines
+            if requires_production
+        ]
+        composition_complete = all(
+            session.scalar(
+                select(func.count())
+                .select_from(ComposicionProducto)
+                .where(ComposicionProducto.id_variante == variant_id)
+            )
+            for variant_id in required_variant_ids
+        )
+        advance_confirmed = any(
+            item["tipo_hito"] == "ANTICIPO" and item["estado"] == "PAGADO"
+            for item in payment["hitos"]
+        )
         reservations_consumed = (not requires_materials) or (
             bool(reservations)
             and all(
@@ -92,6 +114,9 @@ class OrderOperationService:
             principal=principal,
             state=order.estado,
             designs_approved=all_designs_approved,
+            advance_confirmed=advance_confirmed,
+            composition_complete=composition_complete,
+            requires_materials=requires_materials,
             active_reservations=active_reservations,
             reservations_consumed=reservations_consumed,
         )
@@ -124,6 +149,8 @@ class OrderOperationService:
                 "puede_completar": "COMPLETAR_PRODUCCION" in production_actions,
                 "acciones_permitidas": production_actions,
                 "mensaje": production_message,
+                "anticipo_confirmado": advance_confirmed,
+                "composicion_completa": composition_complete,
             },
             "entrega": {
                 "id_envio": delivery.id_envio if delivery else None,
@@ -145,12 +172,21 @@ class OrderOperationService:
         principal: Principal,
         state: str,
         designs_approved: bool,
+        advance_confirmed: bool,
+        composition_complete: bool,
+        requires_materials: bool,
         active_reservations: bool,
         reservations_consumed: bool,
     ) -> tuple[list[str], str]:
         if state == "EN_DISENO":
+            if not advance_confirmed:
+                return [], "Falta confirmar el anticipo"
             if not designs_approved:
                 return [], "Faltan diseños vigentes aprobados"
+            if not composition_complete:
+                return [], "Falta completar la composición de los productos"
+            if requires_materials and not active_reservations:
+                return [], "No hay materiales reservados para iniciar producción"
             if not AuthorizationService.has_permission(session, principal, "PRODUCCION_INICIAR"):
                 return [], "No tiene permiso para iniciar producción"
             return ["INICIAR_PRODUCCION"], "El pedido está listo para iniciar producción"

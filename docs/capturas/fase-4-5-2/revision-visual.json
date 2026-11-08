@@ -1,0 +1,54 @@
+[
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "documentWidth": 1440,
+    "horizontalOverflow": false,
+    "unlabeledControls": 0,
+    "unnamedButtons": 0,
+    "title": "Catálogo",
+    "file": "cliente-catalogo-escritorio.png",
+    "pageErrors": []
+  },
+  {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "documentWidth": 390,
+    "horizontalOverflow": false,
+    "unlabeledControls": 0,
+    "unnamedButtons": 0,
+    "title": "Taza personalizada",
+    "file": "cliente-detalle-movil.png",
+    "pageErrors": []
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "documentWidth": 1440,
+    "horizontalOverflow": false,
+    "unlabeledControls": 0,
+    "unnamedButtons": 0,
+    "title": "Diseños",
+    "file": "admin-disenos-escritorio.png",
+    "pageErrors": []
+  },
+  {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "documentWidth": 390,
+    "horizontalOverflow": false,
+    "unlabeledControls": 0,
+    "unnamedButtons": 0,
+    "title": "Diseños",
+    "file": "admin-disenos-movil.png",
+    "pageErrors": []
+  }
+]

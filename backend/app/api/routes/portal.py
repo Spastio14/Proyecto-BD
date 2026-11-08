@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.security import Principal, get_principal
 from app.db.session import get_session
-from app.schemas.api import OrderCreate, PaymentReport, QuoteCreate, QuoteDecision
+from app.schemas.api import DesignDecision, OrderCreate, PaymentReport, QuoteCreate, QuoteDecision
 from app.schemas.portal import (
     PortalCatalogItem,
     PortalOrder,
@@ -14,6 +14,7 @@ from app.schemas.portal import (
     PortalQuote,
     PortalSummary,
 )
+from app.services.designs import DesignService
 from app.services.orders import OrderLineInput, OrderService
 from app.services.payments import PaymentService
 from app.services.portal import PortalService
@@ -47,6 +48,7 @@ def create_order(
                 variant_id=line.variant_id,
                 quantity=line.quantity,
                 promotion_id=line.promotion_id,
+                customization=line.customization,
             )
             for line in payload.lines
         ],
@@ -62,6 +64,70 @@ def order_detail(
     session: Session = Depends(get_session),
 ):
     return PortalService.order_detail(session, code=code, principal=principal)
+
+
+@router.get("/pedidos/{code}/disenos")
+def order_designs(
+    code: str,
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> list[dict[str, object]]:
+    order = PortalService._order_by_code(session, code=code, principal=principal)
+    return DesignService.order_lines(
+        session, order_id=order.id_pedido, principal=principal
+    )
+
+
+@router.get(
+    "/pedidos/{code}/disenos/{line_number}/versiones/{version_number}/archivo"
+)
+def order_design_file(
+    code: str,
+    line_number: int,
+    version_number: int,
+    request: Request,
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    order = PortalService._order_by_code(session, code=code, principal=principal)
+    coordinator = getattr(request.app.state, "storage_coordinator", None)
+    if coordinator is None:
+        from app.api.routes.designs import StorageRouteUnavailable
+
+        raise StorageRouteUnavailable("Supabase Storage no está configurado")
+    url = coordinator.design_url(
+        session,
+        order_id=order.id_pedido,
+        line_number=line_number,
+        version_number=version_number,
+        principal=principal,
+    )
+    return {"signed_url": url, "expires_in": request.app.state.settings.storage_signed_url_ttl}
+
+
+@router.post(
+    "/pedidos/{code}/disenos/{line_number}/versiones/{version_number}/decision"
+)
+def decide_order_design(
+    code: str,
+    line_number: int,
+    version_number: int,
+    payload: DesignDecision,
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    order = PortalService._order_by_code(session, code=code, principal=principal)
+    decision = DesignService().decide(
+        session,
+        order_id=order.id_pedido,
+        line_number=line_number,
+        version_number=version_number,
+        approved=payload.approved,
+        medium="PORTAL",
+        observations=payload.observations,
+        principal=principal,
+    )
+    return {"estado": decision.tipo_decision}
 
 
 @router.get("/cotizaciones", response_model=list[PortalQuote])
@@ -158,8 +224,16 @@ def report_payment(
 
 
 @router.get("/catalogo", response_model=list[PortalCatalogItem])
-def catalog(principal: Principal = Depends(get_principal), session: Session = Depends(get_session)):
-    return PortalService.catalog(session, principal)
+def catalog(
+    request: Request,
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+):
+    return PortalService.catalog(
+        session,
+        principal,
+        public_storage_url=request.app.state.settings.supabase_url,
+    )
 
 
 @router.get("/catalogo/{variant_id}/precio", response_model=PortalPricePreview)

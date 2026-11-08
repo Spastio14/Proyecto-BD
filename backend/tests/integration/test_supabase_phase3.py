@@ -516,10 +516,11 @@ def test_63_transaction_pooler_disables_prepared_statements(monkeypatch):
     assert captured["connect_args"]["sslmode"] == "require"
 
 
-def test_64_design_upload_creates_private_version(engine, customer):
+def test_64_design_upload_creates_private_version(engine, customer, employee):
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     with factory() as session, session.begin():
         order = create_order(session, customer)
+        order.estado = "EN_DISENO"
         order_id = order.id_pedido
     gateway = FakeGateway()
     version = storage(factory, gateway).upload_design(
@@ -529,14 +530,14 @@ def test_64_design_upload_creates_private_version(engine, customer):
         content_type="image/png",
         content=b"\x89PNG\r\n\x1a\ntest",
         observations=None,
-        principal=customer,
+        principal=employee,
     )
     assert version.ruta_archivo.startswith(f"pedidos/{order_id}/lineas/1/")
     assert not version.ruta_archivo.startswith("http")
     assert gateway.uploaded[0][0] == "disenos"
 
 
-def test_65_storage_rejects_mime_before_upload(engine, customer):
+def test_65_storage_rejects_mime_before_upload(engine, employee):
     gateway = FakeGateway()
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     with pytest.raises(Conflict, match="Tipo"):
@@ -547,16 +548,19 @@ def test_65_storage_rejects_mime_before_upload(engine, customer):
             content_type="image/svg+xml",
             content=b"<svg/>",
             observations=None,
-            principal=customer,
+            principal=employee,
         )
     assert gateway.uploaded == []
 
 
-def test_66_storage_deletes_object_when_database_link_fails(engine, customer, monkeypatch):
+def test_66_storage_deletes_object_when_database_link_fails(
+    engine, customer, employee, monkeypatch
+):
     gateway = FakeGateway()
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     with factory() as session, session.begin():
         order = create_order(session, customer)
+        order.estado = "EN_DISENO"
         order_id = order.id_pedido
 
     def fail_after_upload(*args, **kwargs):
@@ -571,7 +575,7 @@ def test_66_storage_deletes_object_when_database_link_fails(engine, customer, mo
             content_type="image/png",
             content=b"\x89PNG\r\n\x1a\ntest",
             observations=None,
-            principal=customer,
+            principal=employee,
         )
     assert gateway.removed and gateway.removed[0][0] == "disenos"
 

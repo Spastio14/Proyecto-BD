@@ -12,13 +12,34 @@
     }
   }
 
+  function validationMessage(detail) {
+    if (typeof detail === "string" && detail.trim()) return detail;
+    if (Array.isArray(detail)) {
+      const messages = detail.map((item) => {
+        if (typeof item === "string") return item;
+        if (!item || typeof item !== "object") return "Dato inválido";
+        const location = Array.isArray(item.loc)
+          ? item.loc.filter((part) => !["body", "query", "path"].includes(part)).join(" → ")
+          : "";
+        const message = typeof item.msg === "string" ? item.msg : "Dato inválido";
+        return location ? `${location}: ${message}` : message;
+      }).filter(Boolean);
+      if (messages.length) return messages.join(". ");
+    }
+    if (detail && typeof detail === "object") {
+      if (typeof detail.message === "string") return detail.message;
+      if (typeof detail.msg === "string") return detail.msg;
+    }
+    return "La operación no pudo completarse";
+  }
+
   async function requestJSON(fetchImpl, url, options = {}) {
     let response;
     try { response = await fetchImpl(url, options); }
     catch { throw new ApiError("No fue posible comunicarse con la API"); }
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new ApiError(data.detail || "La operación no pudo completarse", {
+      throw new ApiError(validationMessage(data.detail), {
         status: response.status,
         code: typeof data.error === "string" ? data.error : "http_error",
       });
@@ -92,5 +113,5 @@
     throw new Error("Esta página requiere un enlace de invitación enviado por un administrador.");
   }
 
-  return { ApiError, requestJSON, verifyIdentity, classifyIdentityError, invitationInput, isTransient };
+  return { ApiError, requestJSON, validationMessage, verifyIdentity, classifyIdentityError, invitationInput, isTransient };
 });

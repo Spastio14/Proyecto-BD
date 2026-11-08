@@ -78,6 +78,7 @@ def create_app(
                 gateway,
                 design_max_bytes=configured.storage_design_max_bytes,
                 receipt_max_bytes=configured.storage_receipt_max_bytes,
+                product_max_bytes=configured.storage_product_max_bytes,
                 signed_url_ttl=configured.storage_signed_url_ttl,
             )
             application.state.employee_invitation_coordinator = EmployeeInvitationCoordinator(

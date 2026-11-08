@@ -39,6 +39,15 @@ def list_versions(
     ]
 
 
+@router.get("/pedidos/{order_id}/lineas")
+def list_order_lines(
+    order_id: int,
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> list[dict[str, object]]:
+    return DesignService.order_lines(session, order_id=order_id, principal=principal)
+
+
 @router.post(
     "/pedidos/{order_id}/lineas/{line_number}/versiones",
     status_code=status.HTTP_201_CREATED,
@@ -110,6 +119,9 @@ def decide(
         version_number=version_number,
         approved=payload.approved,
         medium=payload.medium,
+        observations=payload.observations,
+        reference=payload.reference,
+        evidence=payload.evidence,
         principal=principal,
     )
     return {"id_aprobacion": decision.id_aprobacion, "tipo_decision": decision.tipo_decision}

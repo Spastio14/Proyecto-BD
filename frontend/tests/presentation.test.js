@@ -16,6 +16,8 @@ test("presenta importes en córdobas y cantidades legibles", () => {
   assert.match(amount, /1[,.]250/);
   assert.match(amount, /50/);
   assert.equal(presentation.quantity(2.5, "UNIDAD"), "2.5 unidad");
+  assert.equal(presentation.quantity(2.5, { unidad_medida: "UNIDAD" }), "2.5");
+  assert.doesNotMatch(presentation.quantity(2.5, {}), /object Object/);
 });
 
 test("presenta fechas en la zona horaria de Managua", () => {

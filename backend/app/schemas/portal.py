@@ -10,6 +10,7 @@ class PortalProductLine(BaseModel):
     cantidad: int
     precio_unitario: Decimal
     importe: Decimal
+    personalizacion: str | None = None
 
 
 class PortalHistoryItem(BaseModel):
@@ -76,6 +77,7 @@ class PortalSummary(BaseModel):
 
 
 class PortalCatalogItem(BaseModel):
+    id_producto: int
     id_variante: int
     codigo: str
     producto: str
@@ -85,6 +87,7 @@ class PortalCatalogItem(BaseModel):
     precio_referencia: Decimal
     disponibilidad: str
     requiere_produccion: bool
+    imagen_url: str | None = None
 
 
 class PortalPricePreview(BaseModel):

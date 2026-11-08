@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     guest_cookie_max_age: int = Field(default=60 * 60 * 24 * 30, ge=300)
     storage_design_max_bytes: int = Field(default=10 * 1024 * 1024, ge=1024)
     storage_receipt_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024)
+    storage_product_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024)
     storage_signed_url_ttl: int = Field(default=300, ge=30, le=3600)
     employee_invite_redirect_url: str | None = None
     log_level: str = "INFO"

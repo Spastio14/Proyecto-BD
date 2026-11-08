@@ -149,6 +149,98 @@ class EmployeeService:
         return result
 
     @staticmethod
+    def detail(
+        session: Session, *, employee_id: int, principal: Principal
+    ) -> dict[str, object]:
+        AuthorizationService.require(session, principal, "EMPLEADO_GESTIONAR")
+        row = session.execute(
+            select(Empleado, Persona)
+            .join(Persona, Persona.id_persona == Empleado.id_persona)
+            .where(Empleado.id_persona == employee_id)
+        ).one_or_none()
+        if row is None:
+            raise NotFound("Empleado no encontrado")
+        employee, person = row
+        return {
+            "id_persona": employee.id_persona,
+            "codigo_empleado": employee.codigo_empleado,
+            "nombres": person.nombres,
+            "apellidos": person.apellidos,
+            "correo": person.correo_electronico,
+            "telefono": person.telefono_contacto,
+            "documento": person.documento_identificacion,
+            "estado_laboral": employee.estado_laboral,
+        }
+
+    @staticmethod
+    def update_identity(
+        session: Session,
+        *,
+        employee_id: int,
+        changes: dict[str, object],
+        principal: Principal,
+    ) -> Persona:
+        AuthorizationService.require(session, principal, "EMPLEADO_GESTIONAR")
+        employee = session.get(Empleado, employee_id)
+        person = session.scalar(
+            select(Persona).where(Persona.id_persona == employee_id).with_for_update()
+        )
+        if employee is None or person is None:
+            raise NotFound("Empleado no encontrado")
+        before = {
+            "nombres": person.nombres,
+            "apellidos": person.apellidos,
+            "telefono": person.telefono_contacto,
+            "documento": person.documento_identificacion,
+        }
+        mapping = {
+            "names": "nombres",
+            "surnames": "apellidos",
+            "phone": "telefono_contacto",
+            "document": "documento_identificacion",
+        }
+        for source, target in mapping.items():
+            if source in changes:
+                value = changes[source]
+                setattr(person, target, value.strip() if isinstance(value, str) else value)
+        AuditService.record(
+            session,
+            principal=principal,
+            action="ACTUALIZAR_IDENTIDAD_EMPLEADO",
+            object_type="EMPLEADO",
+            object_reference=str(employee_id),
+            reason="Actualización administrativa autorizada",
+            before=before,
+            after={
+                "nombres": person.nombres,
+                "apellidos": person.apellidos,
+                "telefono": person.telefono_contacto,
+                "documento": person.documento_identificacion,
+            },
+        )
+        return person
+
+    @staticmethod
+    def possible_duplicates(
+        session: Session, principal: Principal
+    ) -> list[dict[str, object]]:
+        AuthorizationService.require(session, principal, "EMPLEADO_GESTIONAR")
+        employees = EmployeeService.list_all(session, principal)
+        groups: dict[str, list[dict[str, object]]] = {}
+        for item in employees:
+            email = str(item.get("correo") or "").strip().lower()
+            name = " ".join(str(item.get("nombre") or "").lower().split())
+            if email:
+                groups.setdefault(f"correo:{email}", []).append(item)
+            if name:
+                groups.setdefault(f"nombre:{name}", []).append(item)
+        return [
+            {"coincidencia": key, "empleados": rows}
+            for key, rows in groups.items()
+            if len(rows) > 1
+        ]
+
+    @staticmethod
     def _activation_status(
         *, employee: Empleado, account: CuentaAcceso | None, latest_action: str | None
     ) -> str:

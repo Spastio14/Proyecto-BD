@@ -18,6 +18,7 @@ from app.api.routes import (
     purchases,
     quotations,
     reports,
+    sales,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -35,6 +36,7 @@ api_router.include_router(losses.router)
 api_router.include_router(purchases.router)
 api_router.include_router(deliveries.router)
 api_router.include_router(reports.router)
+api_router.include_router(sales.router)
 api_router.include_router(employees.router)
 api_router.include_router(profiles.router)
 api_router.include_router(portal.router)
