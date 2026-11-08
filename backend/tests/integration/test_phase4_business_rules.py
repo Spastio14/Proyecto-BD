@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import sessionmaker
 
 from app.core.exceptions import Conflict
+from app.core.security import Principal
 from app.models.entities import (
     Cotizacion,
     HistorialPedido,
@@ -98,7 +99,7 @@ def test_85_latest_rejection_blocks_production_after_previous_approval(session, 
         line_number=1,
         file_name="version.png",
         private_path="pedidos/prueba/version.png",
-        principal=customer,
+        principal=employee,
     )
     designs.decide(
         session,
@@ -106,7 +107,7 @@ def test_85_latest_rejection_blocks_production_after_previous_approval(session, 
         line_number=1,
         version_number=version.numero_version,
         approved=True,
-        principal=employee,
+        principal=customer,
     )
     designs.decide(
         session,
@@ -114,7 +115,7 @@ def test_85_latest_rejection_blocks_production_after_previous_approval(session, 
         line_number=1,
         version_number=version.numero_version,
         approved=False,
-        principal=employee,
+        principal=customer,
     )
 
     with pytest.raises(Conflict, match="no está aprobada"):
@@ -166,7 +167,9 @@ def test_86_concurrent_payment_reports_share_one_idempotent_result(engine, sessi
 @pytest.mark.concurrency
 def test_87_concurrent_design_uploads_receive_consecutive_versions(engine, session):
     customer = add_client(session)
+    employee = Principal(persona_id=3, origin="EMPLEADO")
     order = create_order(session, customer)
+    order.estado = "EN_DISENO"
     order_id = order.id_pedido
     session.commit()
     factory = sessionmaker(bind=engine, expire_on_commit=False)
@@ -182,7 +185,7 @@ def test_87_concurrent_design_uploads_receive_consecutive_versions(engine, sessi
                     line_number=1,
                     file_name=f"v{suffix}.png",
                     private_path=f"pedidos/prueba/v{suffix}.png",
-                    principal=customer,
+                    principal=employee,
                 )
                 worker.commit()
                 return "ok", version.numero_version

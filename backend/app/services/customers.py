@@ -47,6 +47,84 @@ class CustomerService:
         session.flush()
         return client
 
+    @classmethod
+    def create_point_of_sale(
+        cls,
+        session: Session,
+        *,
+        principal: Principal,
+        names: str,
+        surnames: str | None,
+        phone: str | None,
+        email: str | None,
+    ) -> Cliente:
+        AuthorizationService.require(session, principal, "PEDIDO_GESTIONAR")
+        normalized_email = email.strip().lower() if email else None
+        if normalized_email and session.scalar(
+            select(Persona.id_persona).where(
+                func.lower(Persona.correo_electronico) == normalized_email
+            )
+        ):
+            raise Conflict("Ya existe un cliente con ese correo")
+        client = cls().create(
+            session,
+            names=names,
+            surnames=surnames,
+            client_type="INVITADO",
+            email=normalized_email,
+            phone=phone,
+            origin="PRESENCIAL",
+        )
+        AuditService.record(
+            session,
+            principal=principal,
+            action="CREAR_CLIENTE_PRESENCIAL",
+            object_type="CLIENTE",
+            object_reference=str(client.id_persona),
+            reason="Cliente individual creado para venta de mostrador",
+            after={"tipo_cliente": "INVITADO", "origen": "PRESENCIAL"},
+        )
+        return client
+
+    @staticmethod
+    def search(
+        session: Session,
+        *,
+        principal: Principal,
+        query: str,
+        limit: int = 20,
+    ) -> list[dict[str, object]]:
+        AuthorizationService.require(session, principal, "CLIENTE_CONSULTAR")
+        term = f"%{query.strip()}%"
+        rows = session.execute(
+            select(Cliente, Persona)
+            .join(Persona, Persona.id_persona == Cliente.id_persona)
+            .where(
+                Cliente.estado == "ACTIVO",
+                (
+                    Persona.nombres.ilike(term)
+                    | Persona.apellidos.ilike(term)
+                    | Persona.telefono_contacto.ilike(term)
+                    | Persona.correo_electronico.ilike(term)
+                ),
+            )
+            .order_by(Persona.nombres, Persona.apellidos)
+            .limit(limit)
+        ).all()
+        return [
+            {
+                "id_persona": client.id_persona,
+                "nombre": " ".join(
+                    value for value in (person.nombres, person.apellidos) if value
+                ),
+                "telefono": person.telefono_contacto,
+                "correo": person.correo_electronico,
+                "tipo_cliente": client.tipo_cliente,
+                "condicion_comercial": client.condicion_comercial,
+            }
+            for client, person in rows
+        ]
+
     @staticmethod
     def get(session: Session, client_id: int) -> Cliente:
         client = session.scalar(select(Cliente).where(Cliente.id_persona == client_id))

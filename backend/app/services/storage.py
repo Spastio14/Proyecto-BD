@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.core.exceptions import Conflict, NotFound, PermissionDenied
 from app.core.security import Principal
 from app.integrations.supabase import StorageGateway
-from app.models.entities import DetallePedido, Pedido, Transaccion, VersionDiseno
+from app.models.entities import DetallePedido, Pedido, Producto, Transaccion, VersionDiseno
+from app.services.audit import AuditService
 from app.services.authorization import AuthorizationService
 from app.services.designs import DesignService
 
@@ -23,11 +24,13 @@ class StorageCoordinator:
         design_max_bytes: int,
         receipt_max_bytes: int,
         signed_url_ttl: int,
+        product_max_bytes: int = 5 * 1024 * 1024,
     ):
         self.factory = factory
         self.gateway = gateway
         self.design_max_bytes = design_max_bytes
         self.receipt_max_bytes = receipt_max_bytes
+        self.product_max_bytes = product_max_bytes
         self.signed_url_ttl = signed_url_ttl
 
     @staticmethod
@@ -69,10 +72,14 @@ class StorageCoordinator:
         observations: str | None,
         principal: Principal,
     ) -> VersionDiseno:
+        if not principal.is_employee:
+            raise PermissionDenied("Sólo el personal autorizado puede cargar diseños")
         self._validate(content, content_type, self.design_max_bytes)
         suffix = self._suffix(file_name, content_type)
         with self.factory() as precheck:
-            self._authorize_order(precheck, order_id, principal, "DISENO_APROBAR")
+            order = self._authorize_order(precheck, order_id, principal, "DISENO_APROBAR")
+            if order.estado != "EN_DISENO":
+                raise Conflict("El pedido no está en una etapa que admita nuevos diseños")
             if precheck.get(DetallePedido, (order_id, line_number)) is None:
                 raise NotFound("Línea de pedido no encontrada")
         path = f"pedidos/{order_id}/lineas/{line_number}/{uuid4().hex}{suffix}"
@@ -93,6 +100,81 @@ class StorageCoordinator:
             return version
         except Exception:
             self.gateway.delete(bucket="disenos", path=path)
+            raise
+
+    def upload_product_image(
+        self,
+        *,
+        product_id: int,
+        file_name: str,
+        content_type: str,
+        content: bytes,
+        principal: Principal,
+    ) -> Producto:
+        if content_type not in {"image/png", "image/jpeg", "image/webp"}:
+            raise Conflict("La fotografía debe ser PNG, JPEG o WebP")
+        if not content or len(content) > self.product_max_bytes:
+            raise Conflict("La fotografía supera el tamaño permitido")
+        signatures = {
+            "image/png": b"\x89PNG\r\n\x1a\n",
+            "image/jpeg": b"\xff\xd8\xff",
+        }
+        valid_signature = (
+            len(content) >= 12
+            and content.startswith(b"RIFF")
+            and content[8:12] == b"WEBP"
+            if content_type == "image/webp"
+            else content.startswith(signatures[content_type])
+        )
+        if not valid_signature:
+            raise Conflict("El contenido no coincide con el tipo de imagen")
+        suffix = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}[
+            content_type
+        ]
+        supplied = Path(file_name).suffix.lower().replace(".jpeg", ".jpg")
+        if supplied != suffix:
+            raise Conflict("La extensión no coincide con el tipo de imagen")
+        with self.factory() as precheck:
+            AuthorizationService.require(precheck, principal, "CATALOGO_GESTIONAR")
+            product = precheck.get(Producto, product_id)
+            if product is None:
+                raise NotFound("Producto no encontrado")
+        path = f"productos/{product_id}/{uuid4().hex}{suffix}"
+        self.gateway.upload(
+            bucket="catalogo-productos", path=path, content=content, content_type=content_type
+        )
+        old_path = None
+        try:
+            with self.factory() as session, session.begin():
+                AuthorizationService.require(session, principal, "CATALOGO_GESTIONAR")
+                product = session.scalar(
+                    select(Producto)
+                    .where(Producto.id_producto == product_id)
+                    .with_for_update()
+                )
+                if product is None:
+                    raise NotFound("Producto no encontrado")
+                old_path = product.ruta_imagen_principal
+                product.ruta_imagen_principal = path
+                product.imagen_mime = content_type
+                product.imagen_tamano_bytes = len(content)
+                AuditService.record(
+                    session,
+                    principal=principal,
+                    action="ACTUALIZAR_IMAGEN_PRODUCTO",
+                    object_type="PRODUCTO",
+                    object_reference=str(product_id),
+                    reason="Fotografía comercial validada y almacenada",
+                    before={"ruta": old_path},
+                    after={"ruta": path, "mime": content_type, "tamano": len(content)},
+                )
+                session.flush()
+                session.expunge(product)
+            if old_path and old_path != path:
+                self.gateway.delete(bucket="catalogo-productos", path=old_path)
+            return product
+        except Exception:
+            self.gateway.delete(bucket="catalogo-productos", path=path)
             raise
 
     def upload_receipt(

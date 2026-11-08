@@ -129,7 +129,8 @@
 
   function quantity(value, unit = "") {
     const amount = new Intl.NumberFormat("es-NI", { maximumFractionDigits: 3 }).format(Number(value || 0));
-    return unit ? `${amount} ${label(unit).toLowerCase()}` : amount;
+    const safeUnit = typeof unit === "string" ? unit.trim() : "";
+    return safeUnit ? `${amount} ${label(safeUnit).toLowerCase()}` : amount;
   }
 
   function friendlyError(message, employee = false) {

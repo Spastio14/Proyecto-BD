@@ -29,6 +29,7 @@ class OrderLineInput:
     variant_id: int
     quantity: int
     promotion_id: int | None = None
+    customization: str | None = None
 
 
 class OrderService:
@@ -43,8 +44,18 @@ class OrderService:
         lines: list[OrderLineInput],
         channel: str = "WEB",
         delivery_mode: str = "RETIRO",
+        client_id: int | None = None,
     ) -> Pedido:
-        client = lock_client(session, principal.persona_id)
+        if principal.is_employee:
+            AuthorizationService.require(session, principal, "PEDIDO_GESTIONAR")
+            if client_id is None:
+                raise Conflict("Selecciona el cliente del pedido presencial")
+            target_client_id = client_id
+        else:
+            if client_id is not None and client_id != principal.persona_id:
+                raise PermissionDenied("No puedes crear pedidos para otro cliente")
+            target_client_id = principal.persona_id
+        client = lock_client(session, target_client_id)
         if not lines:
             raise Conflict("El pedido requiere al menos una línea")
         if any(line.quantity <= 0 for line in lines):
@@ -67,7 +78,7 @@ class OrderService:
         total = money(sum((line.total for line in priced), ZERO))
         order = Pedido(
             id_cliente=client.id_persona,
-            id_empleado_registro=None,
+            id_empleado_registro=principal.persona_id if principal.is_employee else None,
             id_etapa_actual=None,
             id_cotizacion=None,
             codigo_pedido=f"PED-{uuid4().hex[:16].upper()}",
@@ -98,6 +109,7 @@ class OrderService:
                     costo_real_consolidado=None,
                     modo_precio=result.mode,
                     id_promocion=result.promotion_id,
+                    descripcion_personalizacion=source.customization,
                 )
             )
         advance = minimum_advance(total)

@@ -77,6 +77,7 @@ class PortalService:
                 cantidad=detail.cantidad,
                 precio_unitario=detail.precio_unitario_aplicado,
                 importe=detail.importe_pactado,
+                personalizacion=detail.descripcion_personalizacion,
             )
             for detail, variant, product in rows
         ]
@@ -238,6 +239,7 @@ class PortalService:
                     importe=money(
                         detail.precio_ofrecido * detail.cantidad - detail.descuento_ofrecido
                     ),
+                    personalizacion=detail.descripcion_personalizacion,
                 )
                 for detail, variant, product in rows
             ],
@@ -289,7 +291,13 @@ class PortalService:
         )
 
     @classmethod
-    def catalog(cls, session: Session, principal: Principal) -> list[PortalCatalogItem]:
+    def catalog(
+        cls,
+        session: Session,
+        principal: Principal,
+        *,
+        public_storage_url: str | None = None,
+    ) -> list[PortalCatalogItem]:
         cls._require_client(principal)
         rows = session.execute(
             select(VarianteProducto, Producto, Categoria)
@@ -304,6 +312,7 @@ class PortalService:
         ).all()
         return [
             PortalCatalogItem(
+                id_producto=product.id_producto,
                 id_variante=variant.id_variante,
                 codigo=variant.codigo_variante,
                 producto=product.nombre,
@@ -315,6 +324,12 @@ class PortalService:
                 precio_referencia=variant.precio_detalle,
                 disponibilidad="BAJO_PEDIDO" if variant.requiere_produccion else "DISPONIBLE",
                 requiere_produccion=variant.requiere_produccion,
+                imagen_url=(
+                    f"{public_storage_url.rstrip('/')}/storage/v1/object/public/catalogo-productos/"
+                    f"{product.ruta_imagen_principal}"
+                    if public_storage_url and product.ruta_imagen_principal
+                    else None
+                ),
             )
             for variant, product, category in rows
         ]

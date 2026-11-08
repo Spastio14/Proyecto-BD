@@ -60,6 +60,26 @@ test("conserva estado y código de errores HTTP", async () => {
   );
 });
 
+test("convierte errores estructurados de FastAPI en mensajes legibles", async () => {
+  await assert.rejects(
+    requestJSON(
+      async () => response(422, {
+        detail: [
+          { loc: ["body", "lines", 0, "quantity"], msg: "Input should be greater than 0" },
+          { loc: ["body", "client_id"], msg: "Field required" },
+        ],
+      }),
+      "/api/v1/ventas/pedidos",
+    ),
+    (error) => {
+      assert.match(error.message, /lines → 0 → quantity/);
+      assert.match(error.message, /client_id: Field required/);
+      assert.doesNotMatch(error.message, /\[object Object\]/);
+      return true;
+    },
+  );
+});
+
 test("el login público nunca intenta activar empleados", () => {
   const source = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
   assert.equal(source.includes("/auth/activar-empleado"), false);
@@ -125,5 +145,6 @@ test("producción muestra sólo acciones operativas autorizadas", () => {
   assert.match(source, /acciones_permitidas/);
   assert.match(source, /INVENTARIO_CONSUMIR_RESERVAS/);
   assert.doesNotMatch(source, /<option value="consume">Consumir reserva<\/option>/);
-  assert.match(source, /No hay acciones de producción autorizadas/);
+  assert.match(source, /Condición para avanzar/);
+  assert.match(source, /produccion\.mensaje/);
 });

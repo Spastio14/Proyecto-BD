@@ -111,6 +111,9 @@ class Producto(Base):
     descripcion: Mapped[str | None] = mapped_column(String(500))
     informacion_comercial: Mapped[str] = mapped_column(Text)
     estado_publicacion: Mapped[str] = mapped_column(String(80))
+    ruta_imagen_principal: Mapped[str | None] = mapped_column(String(1000))
+    imagen_mime: Mapped[str | None] = mapped_column(String(100))
+    imagen_tamano_bytes: Mapped[int | None] = mapped_column(BigInteger)
 
 
 class VarianteProducto(Base):
@@ -243,6 +246,7 @@ class DetallePedido(Base):
     costo_real_consolidado: Mapped[Decimal | None] = mapped_column(money)
     modo_precio: Mapped[str] = mapped_column(String(20))
     id_promocion: Mapped[int | None] = mapped_column(ForeignKey("promocion.id_promocion"))
+    descripcion_personalizacion: Mapped[str | None] = mapped_column(Text)
 
 
 class HistorialPedido(Base):

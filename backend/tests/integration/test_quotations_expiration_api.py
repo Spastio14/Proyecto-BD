@@ -132,7 +132,7 @@ def test_48_production_starts_after_advance_and_current_approval(session, custom
         line_number=1,
         file_name="v1.png",
         private_path="privado/test/v1.png",
-        principal=customer,
+        principal=employee,
     )
     DesignService().decide(
         session,
@@ -140,7 +140,7 @@ def test_48_production_starts_after_advance_and_current_approval(session, custom
         line_number=1,
         version_number=design.numero_version,
         approved=True,
-        principal=employee,
+        principal=customer,
     )
     ProductionService().start(session, order_id=order.id_pedido, principal=employee)
     assert order.estado == "EN_PRODUCCION"
@@ -175,7 +175,7 @@ def test_50_later_balance_never_regresses_production_state(session, customer, em
         line_number=1,
         file_name="v1.png",
         private_path="privado/test/v1.png",
-        principal=customer,
+        principal=employee,
     )
     DesignService().decide(
         session,
@@ -183,7 +183,7 @@ def test_50_later_balance_never_regresses_production_state(session, customer, em
         line_number=1,
         version_number=design.numero_version,
         approved=True,
-        principal=employee,
+        principal=customer,
     )
     ProductionService().start(session, order_id=order.id_pedido, principal=employee)
     balance = PaymentService().report(

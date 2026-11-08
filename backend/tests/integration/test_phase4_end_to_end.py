@@ -309,7 +309,7 @@ def test_106_scenario_a_registered_customer_complete_business_flow(engine, emplo
             line_number=1,
             file_name="arte.png",
             private_path="pedidos/fase4/arte.png",
-            principal=customer,
+            principal=employee,
         )
         DesignService().decide(
             session,
@@ -317,7 +317,7 @@ def test_106_scenario_a_registered_customer_complete_business_flow(engine, emplo
             line_number=1,
             version_number=version.numero_version,
             approved=True,
-            principal=employee,
+            principal=customer,
         )
         ProductionService().start(session, order_id=order.id_pedido, principal=employee)
         assert order.estado == "EN_PRODUCCION"
@@ -385,7 +385,7 @@ def test_108_scenario_c_loss_during_production_creates_costed_movement(session, 
         line_number=1,
         file_name="perdida.png",
         private_path="pedidos/fase4/perdida.png",
-        principal=customer,
+        principal=employee,
     )
     DesignService().decide(
         session,
@@ -393,7 +393,7 @@ def test_108_scenario_c_loss_during_production_creates_costed_movement(session, 
         line_number=1,
         version_number=version.numero_version,
         approved=True,
-        principal=employee,
+        principal=customer,
     )
     ProductionService().start(session, order_id=order.id_pedido, principal=employee)
     loss = LossService().report(

@@ -44,6 +44,14 @@ class ProfileService:
         )
         if person is None:
             raise PermissionDenied("La identidad no tiene una persona asociada")
+        if principal.is_employee and {
+            "names",
+            "surnames",
+            "document",
+        }.intersection(changes):
+            raise PermissionDenied(
+                "Los datos de identidad del empleado sólo pueden modificarse por administración"
+            )
         before = CustomerService._person_snapshot(person)
         CustomerService._apply_person_changes(person, changes)
         AuditService.record(

@@ -36,7 +36,7 @@ def prepare_production(session, customer, employee):
         line_number=1,
         file_name="arte-fase-4-3.png",
         private_path="pedidos/prueba/arte-fase-4-3.png",
-        principal=customer,
+        principal=employee,
     )
     DesignService().decide(
         session,
@@ -44,7 +44,7 @@ def prepare_production(session, customer, employee):
         line_number=1,
         version_number=version.numero_version,
         approved=True,
-        principal=employee,
+        principal=customer,
     )
     ProductionService().start(session, order_id=order.id_pedido, principal=employee)
     return order

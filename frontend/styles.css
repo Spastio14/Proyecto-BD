@@ -273,6 +273,8 @@ dd { margin: 0; }
 .customer-catalog { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
 .catalog-card { min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-media); background: var(--surface); }
 .catalog-card .product-media { border-radius: 0; }
+.product-photo, .product-detail-photo { width: 100%; aspect-ratio: 3 / 2; background: var(--paper); object-fit: cover; }
+.catalog-card .product-photo { border-radius: 0; }
 .catalog-card-body { display: grid; gap: 10px; padding: 24px; }
 .catalog-card-body h2, .catalog-card-body p { margin-bottom: 0; }
 .variant-name, .availability { color: var(--ink-soft); font-size: .85rem; }
@@ -280,6 +282,19 @@ dd { margin: 0; }
 .catalog-action { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
 .catalog-action .full-field, .catalog-action button { grid-column: 1 / -1; }
 .catalog-action button { width: 100%; }
+.product-detail-view { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(320px, 1fr); gap: clamp(28px, 5vw, 64px); align-items: start; }
+.product-detail-view .product-media, .product-detail-photo { min-height: 320px; border-radius: var(--radius-media); }
+.catalog-buttons, .work-order-list, .design-list, .design-version-list { display: grid; gap: 12px; }
+.catalog-buttons { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.search-select { display: grid; gap: 7px; }
+.search-select input[type="search"] { min-height: 40px; background: var(--canvas); }
+.work-order { width: 100%; justify-content: space-between; text-align: left; }
+.work-order > span { display: grid; gap: 2px; }
+.design-line > header, .design-version-list > article { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.design-version-list > article { padding-block: 13px; border-top: 1px solid var(--line); }
+.design-version-list > article > div { display: grid; gap: 4px; min-width: 0; }
+.pos-line { display: grid; grid-template-columns: minmax(220px, 1.4fr) minmax(100px, .45fr) minmax(220px, 1fr) auto; gap: 14px; align-items: end; padding: 18px 0; border-top: 1px solid var(--line); }
+.pos-line .line-price { align-self: center; color: var(--brand-strong); }
 
 .balance-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); border-block: 1px solid var(--line); }
 .balance-list article { display: grid; gap: 3px; padding: 20px; border-right: 1px solid var(--line); }
@@ -308,6 +323,7 @@ dd { margin: 0; }
   .customer-account { justify-self: end; }
   .customer-summary-grid { grid-template-columns: 1fr; }
   .customer-catalog { grid-template-columns: 1fr 1fr; }
+  .pos-line { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 800px) {
@@ -322,6 +338,7 @@ dd { margin: 0; }
   .process-step:nth-child(2) { border-right: 0; }
   .process-step:nth-child(-n + 2) { border-bottom: 1px solid var(--line); }
   .auth-layout, .two-columns, .customer-feature, .operations-grid { grid-template-columns: 1fr; }
+  .product-detail-view { grid-template-columns: 1fr; }
   .activation-layout { min-height: auto; grid-template-columns: 1fr; gap: 28px; padding-block: 48px; }
   .dashboard { display: block; }
   .sidebar { position: relative; height: auto; padding: 16px; }
@@ -356,11 +373,13 @@ dd { margin: 0; }
   .customer-account button { font-size: .78rem; }
   .metrics .metric strong { font-size: 1.65rem; }
   .customer-catalog, .catalog-action { grid-template-columns: 1fr; }
+  .catalog-buttons, .pos-line { grid-template-columns: 1fr; }
   .catalog-action .full-field, .catalog-action button { grid-column: auto; }
   .order-card > header, .quote-card > header, .tracking-card > header, .order-card > footer, .product-lines li, .payment-list article { align-items: flex-start; flex-direction: column; }
   .order-card > footer button { width: 100%; }
   .history-list li { grid-template-columns: 1fr; gap: 4px; }
   .payment-list article > div:last-child { text-align: left; }
+  .design-line > header, .design-version-list > article { align-items: stretch; flex-direction: column; }
   dl { grid-template-columns: 1fr; gap: 3px; }
   dd + dt { margin-top: 10px; }
 }

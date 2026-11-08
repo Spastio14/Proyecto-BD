@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, File, Request, Response, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/catalogo", tags=["catalogo"])
 
 
 @router.get("")
-def catalog(session: Session = Depends(get_session)) -> list[dict]:
+def catalog(request: Request, session: Session = Depends(get_session)) -> list[dict]:
     rows = session.execute(
         select(VarianteProducto, Producto, Categoria)
         .join(Producto, Producto.id_producto == VarianteProducto.id_producto)
@@ -37,11 +37,20 @@ def catalog(session: Session = Depends(get_session)) -> list[dict]:
     ).all()
     return [
         {
+            "id_producto": product.id_producto,
             "id_variante": variant.id_variante,
             "codigo": variant.codigo_variante,
             "producto": product.nombre,
             "categoria": category.nombre,
             "precio_detalle": variant.precio_detalle,
+            "descripcion": product.descripcion or product.informacion_comercial,
+            "caracteristicas": variant.caracteristicas,
+            "imagen_url": (
+                f"{request.app.state.settings.supabase_url.rstrip('/')}/storage/v1/object/"
+                f"public/catalogo-productos/{product.ruta_imagen_principal}"
+                if request.app.state.settings.supabase_url and product.ruta_imagen_principal
+                else None
+            ),
         }
         for variant, product, category in rows
     ]
@@ -64,6 +73,7 @@ def _product(row: Producto) -> dict:
         "descripcion": row.descripcion,
         "informacion_comercial": row.informacion_comercial,
         "estado_publicacion": row.estado_publicacion,
+        "tiene_imagen": bool(row.ruta_imagen_principal),
     }
 
 
@@ -152,6 +162,30 @@ def update_product(
             changes=payload.model_dump(exclude_unset=True),
         )
     )
+
+
+@router.post("/admin/productos/{product_id}/imagen", status_code=status.HTTP_201_CREATED)
+async def upload_product_image(
+    product_id: int,
+    request: Request,
+    file: UploadFile = File(),
+    principal: Principal = Depends(get_principal),
+) -> dict[str, object]:
+    from app.api.routes.designs import StorageRouteUnavailable
+
+    coordinator = getattr(request.app.state, "storage_coordinator", None)
+    if coordinator is None:
+        raise StorageRouteUnavailable("Supabase Storage no está configurado")
+    maximum = request.app.state.settings.storage_product_max_bytes
+    content = await file.read(maximum + 1)
+    product = coordinator.upload_product_image(
+        product_id=product_id,
+        file_name=file.filename or "imagen",
+        content_type=file.content_type or "application/octet-stream",
+        content=content,
+        principal=principal,
+    )
+    return {"id_producto": product.id_producto, "imagen_actualizada": True}
 
 
 @router.get("/admin/variantes")

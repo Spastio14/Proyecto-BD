@@ -77,11 +77,27 @@ class OrderLineCreate(StrictInput):
     variant_id: int = Field(gt=0)
     quantity: int = Field(gt=0)
     promotion_id: int | None = Field(default=None, gt=0)
+    customization: str | None = Field(default=None, max_length=1000)
 
 
 class OrderCreate(StrictInput):
     lines: list[OrderLineCreate] = Field(min_length=1)
     delivery_mode: Literal["RETIRO", "ENVIO"] = "RETIRO"
+
+
+class PointOfSaleCustomerCreate(StrictInput):
+    names: str = Field(min_length=1, max_length=120)
+    surnames: str | None = Field(default=None, max_length=120)
+    phone: str | None = Field(default=None, max_length=30)
+    email: str | None = Field(
+        default=None,
+        max_length=254,
+        pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$",
+    )
+
+
+class PointOfSaleOrderCreate(OrderCreate):
+    client_id: int = Field(gt=0)
 
 
 class OrderRead(ORMModel):
@@ -103,6 +119,10 @@ class QuoteLineCreate(StrictInput):
 class QuoteCreate(StrictInput):
     lines: list[QuoteLineCreate] = Field(min_length=1)
     observations: str | None = None
+
+
+class PointOfSaleQuoteCreate(QuoteCreate):
+    client_id: int = Field(gt=0)
 
 
 class QuoteRead(ORMModel):
@@ -308,7 +328,16 @@ class DesignVersionCreate(StrictInput):
 
 class DesignDecision(StrictInput):
     approved: bool
-    medium: str = "PORTAL"
+    medium: Literal["PORTAL", "PRESENCIAL", "WHATSAPP"] = "PORTAL"
+    observations: str | None = Field(default=None, max_length=500)
+    reference: str | None = Field(default=None, max_length=180)
+    evidence: str | None = Field(default=None, max_length=180)
+
+    @model_validator(mode="after")
+    def validate_external_evidence(self):
+        if self.medium != "PORTAL" and (not self.reference or not self.evidence):
+            raise ValueError("Una aprobación externa requiere referencia y evidencia")
+        return self
 
 
 class LossCreate(StrictInput):
@@ -348,6 +377,13 @@ class CustomerAdminUpdate(StrictInput):
     phone: str | None = Field(default=None, max_length=30)
     document: str | None = Field(default=None, max_length=120)
     usual_address: str | None = Field(default=None, max_length=500)
+
+
+class EmployeeIdentityUpdate(StrictInput):
+    names: str | None = Field(default=None, min_length=1, max_length=120)
+    surnames: str | None = Field(default=None, max_length=120)
+    phone: str | None = Field(default=None, max_length=30)
+    document: str | None = Field(default=None, max_length=120)
 
 
 class WholesaleConditionUpdate(StrictInput):

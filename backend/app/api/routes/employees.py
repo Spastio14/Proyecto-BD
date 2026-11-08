@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import DomainError
 from app.core.security import Principal, get_principal
 from app.db.session import get_session
-from app.schemas.api import EmployeeInviteRequest, EmployeeRoleAssignment
+from app.schemas.api import EmployeeIdentityUpdate, EmployeeInviteRequest, EmployeeRoleAssignment
 from app.services.authorization import AuthorizationService
 from app.services.employees import EmployeeService
 
@@ -33,6 +33,41 @@ def list_employees(
     session: Session = Depends(get_session),
 ) -> list[dict[str, object]]:
     return EmployeeService.list_all(session, principal)
+
+
+@router.get("/duplicados-posibles")
+def possible_duplicates(
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> list[dict[str, object]]:
+    return EmployeeService.possible_duplicates(session, principal)
+
+
+@router.get("/{employee_id}")
+def employee_detail(
+    employee_id: int,
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    return EmployeeService.detail(
+        session, employee_id=employee_id, principal=principal
+    )
+
+
+@router.patch("/{employee_id}")
+def update_employee(
+    employee_id: int,
+    payload: EmployeeIdentityUpdate,
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    person = EmployeeService.update_identity(
+        session,
+        employee_id=employee_id,
+        changes=payload.model_dump(exclude_unset=True),
+        principal=principal,
+    )
+    return {"id_persona": person.id_persona, "actualizado": True}
 
 
 @router.post("/invitaciones", status_code=status.HTTP_201_CREATED)

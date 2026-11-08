@@ -42,7 +42,7 @@ def test_31_production_requires_current_design_approval(session, customer, emplo
         line_number=1,
         file_name="v1.png",
         private_path="privado/test/v1.png",
-        principal=customer,
+        principal=employee,
     )
     with pytest.raises(Conflict, match="no está aprobada"):
         ProductionService().start(session, order_id=order.id_pedido, principal=employee)
@@ -57,7 +57,7 @@ def test_32_approval_of_v1_does_not_approve_v2(session, customer, employee):
         line_number=1,
         file_name="v1.png",
         private_path="privado/test/v1.png",
-        principal=customer,
+        principal=employee,
     )
     designs.decide(
         session,
@@ -65,7 +65,7 @@ def test_32_approval_of_v1_does_not_approve_v2(session, customer, employee):
         line_number=1,
         version_number=v1.numero_version,
         approved=True,
-        principal=employee,
+        principal=customer,
     )
     designs.add_version(
         session,
@@ -73,7 +73,7 @@ def test_32_approval_of_v1_does_not_approve_v2(session, customer, employee):
         line_number=1,
         file_name="v2.png",
         private_path="privado/test/v2.png",
-        principal=customer,
+        principal=employee,
     )
     with pytest.raises(Conflict, match="versión vigente"):
         ProductionService().start(session, order_id=order.id_pedido, principal=employee)

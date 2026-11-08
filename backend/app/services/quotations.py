@@ -41,8 +41,18 @@ class QuotationService:
         principal: Principal,
         lines: list[QuoteLineInput],
         observations: str | None = None,
+        client_id: int | None = None,
     ) -> Cotizacion:
-        client = lock_client(session, principal.persona_id)
+        if principal.is_employee:
+            AuthorizationService.require(session, principal, "PEDIDO_GESTIONAR")
+            if client_id is None:
+                raise Conflict("Selecciona el cliente de la cotización presencial")
+            target_client_id = client_id
+        else:
+            if client_id is not None and client_id != principal.persona_id:
+                raise PermissionDenied("No puedes cotizar para otro cliente")
+            target_client_id = principal.persona_id
+        client = lock_client(session, target_client_id)
         if not lines:
             raise Conflict("La cotización requiere líneas")
         priced = [
@@ -78,6 +88,15 @@ class QuotationService:
                     descuento_ofrecido=result.discount,
                 )
             )
+        AuditService.record(
+            session,
+            principal=principal,
+            action="CREAR_COTIZACION",
+            object_type="COTIZACION",
+            object_reference=str(quote.id_cotizacion),
+            reason="Cotización calculada por el backend",
+            after={"id_cliente": client.id_persona, "total": quote.total_ofrecido},
+        )
         session.flush()
         return quote
 

@@ -48,7 +48,7 @@ def ready_for_production(session, customer, administrator, production):
         line_number=1,
         file_name="permiso-produccion.png",
         private_path=f"pedidos/{order.id_pedido}/permiso-produccion.png",
-        principal=customer,
+        principal=production,
     )
     DesignService().decide(
         session,
@@ -56,7 +56,7 @@ def ready_for_production(session, customer, administrator, production):
         line_number=1,
         version_number=version.numero_version,
         approved=True,
-        principal=production,
+        principal=customer,
     )
     return order
 
