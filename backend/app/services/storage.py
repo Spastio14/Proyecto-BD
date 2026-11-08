@@ -1,3 +1,5 @@
+import logging
+import re
 from pathlib import Path
 from uuid import uuid4
 
@@ -13,6 +15,12 @@ from app.services.authorization import AuthorizationService
 from app.services.designs import DesignService
 
 ALLOWED_MIME = frozenset({"image/png", "image/jpeg", "application/pdf"})
+CATALOG_BUCKET = "catalogo-productos"
+CATALOG_IMAGE_PATH = re.compile(
+    r"^productos/[1-9][0-9]*/[0-9a-f]{32}\.(?:png|jpg|webp)$"
+)
+
+logger = logging.getLogger(__name__)
 
 
 class StorageCoordinator:
@@ -141,7 +149,7 @@ class StorageCoordinator:
                 raise NotFound("Producto no encontrado")
         path = f"productos/{product_id}/{uuid4().hex}{suffix}"
         self.gateway.upload(
-            bucket="catalogo-productos", path=path, content=content, content_type=content_type
+            bucket=CATALOG_BUCKET, path=path, content=content, content_type=content_type
         )
         old_path = None
         try:
@@ -170,12 +178,52 @@ class StorageCoordinator:
                 )
                 session.flush()
                 session.expunge(product)
-            if old_path and old_path != path:
-                self.gateway.delete(bucket="catalogo-productos", path=old_path)
-            return product
         except Exception:
-            self.gateway.delete(bucket="catalogo-productos", path=path)
+            self._try_cleanup_catalog_image(path, phase="database_rollback")
             raise
+
+        # PostgreSQL ya confirmó la ruta nueva. La limpieza de la ruta anterior
+        # es secundaria y nunca debe invalidar la referencia recién guardada.
+        if old_path and old_path != path:
+            self._try_cleanup_catalog_image(old_path, phase="post_commit")
+        return product
+
+    def cleanup_orphan_product_image(self, *, path: str, principal: Principal) -> bool:
+        """Elimina una imagen de catálogo generada que ya no esté referenciada.
+
+        Los candidatos se identifican en los logs ``catalog_image_cleanup_pending``.
+        La comprobación de referencias se repite inmediatamente antes de borrar.
+        """
+        if not CATALOG_IMAGE_PATH.fullmatch(path):
+            raise Conflict("La ruta no corresponde a una imagen administrada del catálogo")
+        with self.factory() as session:
+            AuthorizationService.require(session, principal, "CATALOGO_GESTIONAR")
+        return self._delete_catalog_image_if_unreferenced(path)
+
+    def _delete_catalog_image_if_unreferenced(self, path: str) -> bool:
+        with self.factory() as session:
+            referenced = session.scalar(
+                select(Producto.id_producto)
+                .where(Producto.ruta_imagen_principal == path)
+                .limit(1)
+            )
+        if referenced is not None:
+            return False
+        self.gateway.delete(bucket=CATALOG_BUCKET, path=path)
+        return True
+
+    def _try_cleanup_catalog_image(self, path: str, *, phase: str) -> bool:
+        try:
+            return self._delete_catalog_image_if_unreferenced(path)
+        except Exception as exc:
+            logger.warning(
+                "catalog_image_cleanup_pending phase=%s bucket=%s path=%s error_type=%s",
+                phase,
+                CATALOG_BUCKET,
+                path,
+                type(exc).__name__,
+            )
+            return False
 
     def upload_receipt(
         self,
