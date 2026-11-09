@@ -131,6 +131,24 @@ def list_payments(
     ]
 
 
+@router.get("/efectivo/pedidos-disponibles")
+def cash_receivable_orders(
+    principal: Principal = Depends(get_principal), session: Session = Depends(get_session)
+) -> list[dict[str, object]]:
+    return PaymentService.cash_receivable_orders(session, principal)
+
+
+@router.get("/transferencias/pendientes")
+def pending_transfers(
+    principal: Principal = Depends(get_principal), session: Session = Depends(get_session)
+) -> list[dict[str, object]]:
+    rows = PaymentService.list_all(session, principal)
+    pending = [row for row in rows if row.metodo_pago == "TRANSFERENCIA" and row.estado_verificacion == "PENDIENTE"]
+    return [{"id_transaccion": row.id_transaccion, "id_pedido": row.id_pedido,
+             "monto_con_signo": row.monto_con_signo, "estado_verificacion": row.estado_verificacion,
+             "metodo_pago": row.metodo_pago, "fecha_hora": row.fecha_hora} for row in pending]
+
+
 @router.get("/pedidos/{order_id}", response_model=list[PaymentRead])
 def list_order_payments(
     order_id: int,

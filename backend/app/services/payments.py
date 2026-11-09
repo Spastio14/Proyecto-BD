@@ -236,6 +236,7 @@ class PaymentService:
         *,
         payment_id: int,
         principal: Principal,
+        allow_cash: bool = False,
     ) -> Transaccion:
         AuthorizationService.require(session, principal, "PAGO_VERIFICAR")
         reference = session.get(Transaccion, payment_id)
@@ -243,6 +244,10 @@ class PaymentService:
             raise NotFound("Transacción no encontrada")
         order = lock_order(session, reference.id_pedido)
         payment = lock_payment(session, payment_id)
+        if payment.metodo_pago != "TRANSFERENCIA" and not (
+            allow_cash and payment.metodo_pago == "EFECTIVO"
+        ):
+            raise Conflict("Esta operación no corresponde a una transferencia pendiente")
         if payment.estado_verificacion == "VERIFICADO":
             return payment
         if payment.estado_verificacion != "PENDIENTE" or payment.tipo_transaccion != "PAGO":
@@ -346,6 +351,8 @@ class PaymentService:
             raise NotFound("Transacción no encontrada")
         lock_order(session, reference.id_pedido)
         payment = lock_payment(session, payment_id)
+        if payment.metodo_pago != "TRANSFERENCIA":
+            raise Conflict("Solo se pueden rechazar transferencias reportadas")
         if payment.estado_verificacion != "PENDIENTE":
             raise Conflict("La transacción ya fue resuelta")
         payment.estado_verificacion = "RECHAZADO"
@@ -461,7 +468,9 @@ class PaymentService:
         )
         if existing_movement is not None:
             return existing_movement
-        self.confirm(session, payment_id=payment.id_transaccion, principal=principal)
+        self.confirm(
+            session, payment_id=payment.id_transaccion, principal=principal, allow_cash=True
+        )
         folio = f"REC-{datetime.now(UTC):%Y%m%d}-{payment.id_transaccion:08d}"
         movement = MovimientoCaja(
             id_caja=register.id_caja,
@@ -676,6 +685,24 @@ class PaymentService:
         return list(
             session.scalars(select(Transaccion).order_by(Transaccion.fecha_hora.desc()).limit(200))
         )
+
+    @staticmethod
+    def cash_receivable_orders(session: Session, principal: Principal) -> list[dict[str, object]]:
+        AuthorizationService.require(session, principal, "PAGO_VERIFICAR")
+        orders = list(session.scalars(
+            select(Pedido)
+            .where(Pedido.estado.not_in(("CANCELADO", "EXPIRADO", "ENTREGADO")))
+            .order_by(Pedido.fecha_creacion.desc())
+        ))
+        result = []
+        for order in orders:
+            summary = PaymentService.summary(session, order_id=order.id_pedido, principal=principal)
+            available = summary["disponible_reportar"]
+            if available > ZERO:
+                result.append({"id_pedido": order.id_pedido, "codigo_pedido": order.codigo_pedido,
+                    "estado": order.estado, "total_pedido": order.total_pedido,
+                    "importe_disponible": available})
+        return result
 
     @staticmethod
     def _authorize_order(session: Session, order: Pedido, principal: Principal) -> None:
