@@ -17,6 +17,7 @@ from app.models.entities import (
     HitoPago,
     Pedido,
     ReservaInventario,
+    Transaccion,
 )
 from app.repositories.locks import lock_client, lock_order
 from app.services.audit import AuditService
@@ -312,6 +313,24 @@ class OrderService:
         existing = session.scalar(select(Cancelacion).where(Cancelacion.id_pedido == order_id))
         if existing is not None or order.estado == "CANCELADO":
             raise Conflict("El pedido ya fue cancelado")
+        if not principal.is_employee:
+            if order.estado in {"EN_PRODUCCION", "LISTO", "ENTREGADO"}:
+                raise Conflict(
+                    "La producción ya comenzó; solicita una revisión administrativa para cancelar"
+                )
+            if session.scalar(
+                select(Transaccion.id_transaccion)
+                .where(Transaccion.id_pedido == order_id)
+                .limit(1)
+            ) is not None or session.scalar(
+                select(HitoPago.numero_hito).where(
+                    HitoPago.id_pedido == order_id,
+                    HitoPago.estado == "PAGADO",
+                ).limit(1)
+            ) is not None:
+                raise Conflict(
+                    "El pedido tiene pagos reportados o verificados; solicita una revisión administrativa"
+                )
         if "CANCELADO" not in ALLOWED_TRANSITIONS.get(order.estado, frozenset()):
             raise Conflict("El pedido ya no admite cancelación")
         now = datetime.now(UTC)
@@ -340,6 +359,15 @@ class OrderService:
         for reservation in reservations:
             reservation.estado = "LIBERADA"
             reservation.fecha_liberacion = now
+        AuditService.record(
+            session,
+            principal=principal,
+            action="CANCELAR_PEDIDO",
+            object_type="PEDIDO",
+            object_reference=order.codigo_pedido,
+            reason=reason,
+            after={"reservas_liberadas": len(reservations), "pagos_reembolsados": 0},
+        )
         return self.transition(
             session, order_id=order_id, target="CANCELADO", principal=principal, reason=reason
         )

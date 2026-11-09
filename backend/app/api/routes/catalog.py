@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import Principal, get_principal
 from app.db.session import get_session
-from app.models.entities import Categoria, Producto, VarianteProducto
+from app.models.entities import ArticuloInventariable, Categoria, ComposicionProducto, Producto, VarianteProducto
 from app.schemas.api import (
     CategoryCreate,
     CategoryUpdate,
@@ -192,7 +192,29 @@ async def upload_product_image(
 def list_variants(
     principal: Principal = Depends(get_principal), session: Session = Depends(get_session)
 ) -> list[dict]:
-    return [_variant(row) for row in CatalogAdminService.list_variants(session, principal)]
+    from app.services.inventory import InventoryService
+
+    result = []
+    for row in CatalogAdminService.list_variants(session, principal):
+        item = _variant(row)
+        product = session.get(Producto, row.id_producto)
+        recipe = list(session.scalars(select(ComposicionProducto).where(ComposicionProducto.id_variante == row.id_variante)))
+        if product is None or product.estado_publicacion != "PUBLICADO":
+            cause = "PRODUCTO_NO_PUBLICADO"
+        elif row.estado != "ACTIVA":
+            cause = "VARIANTE_INACTIVA"
+        elif row.requiere_produccion and not recipe:
+            cause = "RECETA_INCOMPLETA"
+        elif any((article := session.get(ArticuloInventariable, line.id_articulo)) is None or article.estado != "ACTIVO" for line in recipe):
+            cause = "ARTICULO_INACTIVO"
+        elif row.requiere_produccion and any(InventoryService.availability(session, line.id_articulo) < line.cantidad_estandar for line in recipe):
+            cause = "SIN_EXISTENCIAS"
+        else:
+            cause = "DISPONIBLE"
+        item["causa_disponibilidad"] = cause
+        item["disponible"] = cause == "DISPONIBLE"
+        result.append(item)
+    return result
 
 
 @router.post("/admin/variantes", status_code=status.HTTP_201_CREATED)

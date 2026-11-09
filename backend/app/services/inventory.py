@@ -372,12 +372,20 @@ class InventoryService:
                 "existencia_actual": article.existencia_actual,
                 "existencia_minima": article.existencia_minima,
                 "disponible": cls.availability(session, article.id_articulo),
+                "cantidad_reservada": article.existencia_actual
+                - cls.availability(session, article.id_articulo),
                 "reservado": article.existencia_actual
                 - cls.availability(session, article.id_articulo),
                 "costo_referencia": article.costo_referencia,
                 "bajo_minimo": cls.availability(session, article.id_articulo)
                 <= article.existencia_minima,
                 "estado": article.estado,
+                "causa_disponibilidad": (
+                    "ARTICULO_INACTIVO" if article.estado != "ACTIVO"
+                    else "SIN_EXISTENCIAS" if cls.availability(session, article.id_articulo) <= 0
+                    else "BAJO_MINIMO" if cls.availability(session, article.id_articulo) <= article.existencia_minima
+                    else "DISPONIBLE"
+                ),
             }
             for article in articles
         ]
