@@ -77,7 +77,9 @@ const columns = {
     { key:"codigo", label:"Código", region:"Inventario" },
     { key:"nombre", label:"Artículo" },
     { key:"existencia_actual", label:"Existencia", format:(value,row) => UiPresentation.quantity(value,row.unidad_medida) },
+    { key:"cantidad_reservada", label:"Reservada", format:(value,row) => UiPresentation.quantity(value,row.unidad_medida) },
     { key:"disponible", label:"Disponible", format:(value,row) => UiPresentation.quantity(value,row.unidad_medida) },
+    { key:"causa_disponibilidad", label:"Disponibilidad", format:UiPresentation.label },
     { key:"existencia_minima", label:"Mínimo", format:(value,row) => UiPresentation.quantity(value,row.unidad_medida) },
     { key:"estado", label:"Estado", format:UiPresentation.label },
   ],
@@ -155,11 +157,12 @@ function productLines(lines) {
 }
 
 function orderCard(order, { compact = false } = {}) {
+  const cancellation = order.puede_cancelar ? `<form class="order-cancel-form form-grid" data-path="/portal/pedidos/${encodeURIComponent(order.codigo)}/cancelar"><label>Motivo de cancelación<input name="reason" maxlength="500" required></label><button type="submit" class="secondary">Cancelar pedido</button></form>` : (order.motivo_bloqueo_cancelacion ? `<p class="muted">${escapeHtml(order.motivo_bloqueo_cancelacion)}.</p>` : "");
   return `<article class="order-card">
     <header><div><p class="section-kicker">${escapeHtml(UiPresentation.orderMessage(order.estado))}</p><h2>${escapeHtml(order.codigo)}</h2></div><span class="status status-${escapeHtml(order.estado.toLowerCase())}">${escapeHtml(UiPresentation.label(order.estado))}</span></header>
     ${compact ? "" : productLines(order.productos)}
     <dl class="order-facts"><div><dt>Fecha</dt><dd>${escapeHtml(UiPresentation.date(order.fecha))}</dd></div><div><dt>Total</dt><dd>${escapeHtml(formatCurrency(order.total))}</dd></div><div><dt>Pagado</dt><dd>${escapeHtml(formatCurrency(order.pagado))}</dd></div><div><dt>Saldo</dt><dd>${escapeHtml(formatCurrency(order.saldo_pendiente))}</dd></div><div><dt>Entrega</dt><dd>${escapeHtml(UiPresentation.label(order.modalidad_entrega))}</dd></div></dl>
-    <footer><p><strong>Próxima acción:</strong> ${escapeHtml(UiPresentation.label(order.proxima_accion))}</p><button type="button" class="secondary order-detail" data-order-code="${escapeHtml(order.codigo)}">Ver detalle y seguimiento</button></footer>
+    <footer><p><strong>Próxima acción:</strong> ${escapeHtml(UiPresentation.label(order.proxima_accion))}</p><button type="button" class="secondary order-detail" data-order-code="${escapeHtml(order.codigo)}">Ver detalle y seguimiento</button>${cancellation}</footer>
   </article>`;
 }
 
@@ -180,6 +183,14 @@ async function showOrderDetail(code) {
 }
 function bindOrderDetails() {
   document.querySelectorAll(".order-detail").forEach((button) => button.addEventListener("click", () => showOrderDetail(button.dataset.orderCode).catch((error) => notice(error.message,true))));
+  document.querySelectorAll(".order-cancel-form").forEach((form) => form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const reason = form.elements.reason.value.trim();
+    if (!reason) { notice("Indica el motivo de cancelación", true); return; }
+    if (!confirm("¿Confirmas la cancelación? Los pagos reportados no se reembolsarán automáticamente.")) return;
+    try { await api(form.dataset.path, { method:"POST", body:JSON.stringify({ reason }) }); notice("Pedido cancelado. Las reservas activas fueron liberadas."); await orders(); }
+    catch (error) { notice(error.message, true); }
+  }));
 }
 
 async function summary() {
@@ -233,7 +244,8 @@ async function orders() {
   }
   const activeRows=rows.filter((row)=>!["ENTREGADO","CANCELADO","EXPIRADO"].includes(row.estado));
   const historicalRows=rows.filter((row)=>["ENTREGADO","CANCELADO","EXPIRADO"].includes(row.estado));
-  setContent("Pedidos", `<h2>Activos</h2>${table(activeRows,columns.orders,"No hay pedidos activos.")}<details class="report-details result"><summary>Ver historial (${historicalRows.length})</summary>${table(historicalRows,columns.orders,"No hay pedidos finalizados.")}</details>${forms}`);
+  const cancelForm = permitted("PEDIDO_GESTIONAR") && rows.some((row) => !["CANCELADO","ENTREGADO","EXPIRADO"].includes(row.estado)) ? `<article class="panel"><h2>Gestionar cancelación</h2><p class="muted">Conserva pagos, movimientos y auditoría; no genera reembolsos automáticos.</p><form id="admin-order-cancel" class="form-grid"><label>Pedido<select name="id" data-searchable>${rows.filter((row)=>!["CANCELADO","ENTREGADO","EXPIRADO"].includes(row.estado)).map((row)=>`<option value="${row.id_pedido}">${escapeHtml(row.codigo_pedido)} · ${escapeHtml(row.estado)}</option>`).join("")}</select></label><label>Motivo<input name="reason" maxlength="500" required></label><button type="submit" class="secondary">Confirmar cancelación</button></form></article>` : "";
+  setContent("Pedidos", `<h2>Activos</h2>${table(activeRows,columns.orders,"No hay pedidos activos.")}<details class="report-details result"><summary>Ver historial (${historicalRows.length})</summary>${table(historicalRows,columns.orders,"No hay pedidos finalizados.")}</details>${cancelForm}${forms}`);
   $("#order-operation")?.addEventListener("submit", async (event) => {
     event.preventDefault(); const x = fields(event.target); const [id, action] = x.operation.split(":");
     const actions = {
@@ -245,6 +257,7 @@ async function orders() {
     };
     try { const [path, payload] = actions[action]; await api(path, { method:"POST", body:payload ? JSON.stringify(payload) : undefined }); notice("Operación registrada"); await orders(); } catch(error) { notice(error.message,true); }
   });
+  $("#admin-order-cancel")?.addEventListener("submit", async (event) => { event.preventDefault(); const x=fields(event.target); if (!confirm("¿Confirmas la cancelación administrativa? Se conservarán pagos y no habrá reembolso automático.")) return; try { await api(`/pedidos/${x.id}/cancelar`, { method:"POST", body:JSON.stringify({ reason:x.reason }) }); notice("Cancelación administrativa registrada"); await orders(); } catch(error) { notice(error.message,true); } });
   $("#order-summary")?.addEventListener("submit", async (event) => { event.preventDefault(); const x=fields(event.target); try { const data=await api(`/pedidos/${x.id}/operacion`); $("#order-summary-result").innerHTML=`<p><strong>Siguiente acción:</strong> ${escapeHtml(UiPresentation.label(data.siguiente_accion))}</p><h3>Pagos</h3>${table(data.pago.hitos,[{key:"tipo_hito",label:"Hito",region:"Hitos de pago",format:UiPresentation.label},{key:"monto_exigido",label:"Exigido",format:formatCurrency},{key:"monto_verificado",label:"Verificado",format:formatCurrency},{key:"monto_restante",label:"Pendiente",format:formatCurrency},{key:"estado",label:"Estado",format:UiPresentation.label}],"No hay hitos de pago.")}<h3>Reservas</h3>${table(data.inventario.reservas,[{key:"articulo",label:"Material",region:"Reservas"},{key:"cantidad_reservada",label:"Reservado",format:UiPresentation.quantity},{key:"cantidad_pendiente",label:"Pendiente",format:UiPresentation.quantity},{key:"estado",label:"Estado",format:UiPresentation.label}],"No hay reservas para este pedido.")}`; } catch(error){ notice(error.message,true); } });
   $("#delivery-schedule")?.addEventListener("submit", async (event) => { event.preventDefault(); const x=fields(event.target); try { await api(`/entregas/pedidos/${x.id}`, { method:"POST", body:JSON.stringify({ agency_id:null, address:x.address, recipient_name:x.recipient_name, recipient_phone:x.recipient_phone || null, agreed_fee:"0.00", scheduled_at:null }) }); notice("Envío programado"); } catch(error){ notice(error.message,true); } });
   const deliveryForm = $("#delivery-schedule");
@@ -366,10 +379,10 @@ async function payments(confirmation = null) {
 async function inventory() {
   const [rows, movements] = await Promise.all([api("/inventario/articulos"), api("/inventario/movimientos")]);
   let forms = "";
-  if (permitted("INVENTARIO_GESTIONAR")) forms = `<div class="two-columns result"><article class="panel"><h2>Nuevo artículo</h2><form id="new-article" class="form-grid"><label>Código<input name="code" required></label><label>Nombre<input name="name" required></label><label>Tipo<input name="article_type" value="INSUMO" required></label><label>Unidad<select name="unit"><option>UNIDAD</option><option>ML</option><option>L</option><option>G</option><option>KG</option><option>M</option><option>M2</option><option>HOJA</option></select></label><label>Existencia mínima<input name="minimum_stock" type="number" min="0" step=".001" required></label><label>Costo referencia<input name="reference_cost" type="number" min="0" step=".0001" required></label><button>Crear con existencia cero</button></form></article><article class="panel"><h2>Ajuste autorizado</h2><form id="inventory-adjustment" class="form-grid"><label>Artículo<select name="article_id" data-searchable>${options(rows.filter((x) => x.estado === "ACTIVO"),"id_articulo","nombre")}</select></label><label>Dirección<select name="direction"><option>ENTRADA</option><option>SALIDA</option></select></label><label>Cantidad<input name="quantity" type="number" min=".001" step=".001" required></label><label>Motivo<input name="reason" required></label><button>Registrar movimiento</button></form></article><article class="panel"><h2>Activar o desactivar</h2><form id="article-state" class="form-grid"><label>Artículo<select name="operation">${rows.map((x) => `<option value="${x.id_articulo}:${x.estado === "ACTIVO" ? "INACTIVO" : "ACTIVO"}">${escapeHtml(x.nombre)} · ${x.estado === "ACTIVO" ? "desactivar" : "activar"}</option>`).join("")}</select></label><button>Aplicar</button></form></article></div>`;
+  if (permitted("INVENTARIO_GESTIONAR")) forms = `<div class="two-columns result"><article class="panel"><h2>Nuevo artículo</h2><form id="new-article" class="form-grid"><label>Código<input name="code" required></label><label>Nombre<input name="name" required></label><label>Tipo<input name="article_type" value="INSUMO" required></label><label>Unidad<select name="unit"><option>UNIDAD</option><option>ML</option><option>L</option><option>KG</option><option>M</option><option>M2</option><option>HOJA</option></select></label><label>Existencia mínima<input name="minimum_stock" type="number" min="0" step=".001" required></label><label>Costo referencia<input name="reference_cost" type="number" min="0" step=".0001" required></label><button>Crear con existencia cero</button></form></article><article class="panel"><h2>Ajuste autorizado</h2><p class="muted">Existencia física menos reservas activas determina la cantidad disponible. Agotarse no cambia el estado administrativo.</p><form id="inventory-adjustment" class="form-grid"><label>Artículo<select name="article_id" data-searchable>${options(rows.filter((x) => x.estado === "ACTIVO"),"id_articulo","nombre")}</select></label><label>Dirección<select name="direction"><option>ENTRADA</option><option>SALIDA</option></select></label><label>Cantidad<input name="quantity" type="number" min=".001" step=".001" required></label><label>Motivo<input name="reason" required></label><label>Observaciones<textarea name="observations" maxlength="500"></textarea></label><button>Registrar movimiento auditado</button></form></article><article class="panel"><h2>Estado administrativo</h2><p class="muted">Solo cambia el estado por una decisión administrativa explícita.</p><form id="article-state" class="form-grid"><label>Artículo<select name="operation">${rows.map((x) => `<option value="${x.id_articulo}:${x.estado === "ACTIVO" ? "INACTIVO" : "ACTIVO"}">${escapeHtml(x.nombre)} · ${x.estado === "ACTIVO" ? "desactivar" : "activar"}</option>`).join("")}</select></label><button>Aplicar</button></form></article></div>`;
   setContent("Inventario", table(rows,columns.inventory,"No hay artículos de inventario.") + forms + `<h2>Movimientos recientes</h2>${table(movements,columns.movements,"No hay movimientos recientes.")}`);
   $("#new-article")?.addEventListener("submit", async (event) => { event.preventDefault(); const x=fields(event.target); try { await api("/inventario/articulos", { method:"POST", body:JSON.stringify({ code:x.code, name:x.name, article_type:x.article_type, unit:x.unit, minimum_stock:x.minimum_stock, reference_cost:x.reference_cost }) }); notice("Artículo creado con existencia cero"); await inventory(); } catch(error){ notice(error.message,true); } });
-  $("#inventory-adjustment")?.addEventListener("submit", async (event) => { event.preventDefault(); const x=fields(event.target); try { await api(`/inventario/articulos/${x.article_id}/ajustes`, { method:"POST", body:JSON.stringify({ direction:x.direction, quantity:x.quantity, reason:x.reason, observations:null }) }); notice("Ajuste auditado"); await inventory(); } catch(error){ notice(error.message,true); } });
+  $("#inventory-adjustment")?.addEventListener("submit", async (event) => { event.preventDefault(); const x=fields(event.target); try { await api(`/inventario/articulos/${x.article_id}/ajustes`, { method:"POST", body:JSON.stringify({ direction:x.direction, quantity:x.quantity, reason:x.reason, observations:x.observations || null }) }); notice("Ajuste auditado"); await inventory(); } catch(error){ notice(error.message,true); } });
   $("#article-state")?.addEventListener("submit", async (event) => { event.preventDefault(); const [id,state]=fields(event.target).operation.split(":"); try { await api(`/inventario/articulos/${id}`,{ method:"PATCH",body:JSON.stringify({ state }) }); notice("Estado del artículo actualizado"); await inventory(); } catch(error){ notice(error.message,true); } });
 }
 

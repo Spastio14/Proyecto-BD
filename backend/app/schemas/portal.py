@@ -44,6 +44,8 @@ class PortalOrder(BaseModel):
     proxima_accion: str
     requiere_produccion: bool
     productos: list[PortalProductLine]
+    puede_cancelar: bool = False
+    motivo_bloqueo_cancelacion: str | None = None
 
 
 class PortalOrderDetail(PortalOrder):
@@ -93,6 +95,7 @@ class PortalCatalogItem(BaseModel):
     variante: str
     precio_referencia: Decimal
     disponibilidad: str
+    causa_disponibilidad: str | None = None
     requiere_produccion: bool
     imagen_url: str | None = None
 

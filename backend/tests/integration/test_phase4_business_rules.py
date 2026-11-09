@@ -12,10 +12,12 @@ from app.models.entities import (
     Cotizacion,
     HistorialPedido,
     Pedido,
+    ReservaInventario,
     Transaccion,
     VersionDiseno,
 )
 from app.services.designs import DesignService
+from app.services.inventory import InventoryReservationService
 from app.services.orders import OrderLineInput, OrderService
 from app.services.payments import PaymentService
 from app.services.pricing import PricingService
@@ -366,3 +368,46 @@ def test_95_promotion_requires_its_minimum_quantity(session):
             quantity=1,
             promotion_id=1,
         )
+
+
+def test_96_customer_can_cancel_unpaid_order_and_reuse_active_limit(session):
+    customer = add_client(session)
+    first = create_order(session, customer)
+    second = create_order(session, customer)
+    with pytest.raises(Conflict, match="dos pedidos"):
+        create_order(session, customer)
+    OrderService().cancel(session, order_id=first.id_pedido, principal=customer, reason="Cambio de alcance")
+    third = create_order(session, customer)
+    assert third.id_pedido != first.id_pedido
+    assert first.estado == "CANCELADO"
+
+
+def test_97_customer_cancellation_requires_admin_review_after_payment(session):
+    customer = add_client(session)
+    employee = Principal(persona_id=3, origin="EMPLEADO")
+    order = create_order(session, customer)
+    report_payment(session, order, customer)
+    with pytest.raises(Conflict, match="pagos reportados"):
+        OrderService().cancel(session, order_id=order.id_pedido, principal=customer, reason="Ya no lo necesito")
+    cancelled = OrderService().cancel(session, order_id=order.id_pedido, principal=employee, reason="Revisión administrativa")
+    assert cancelled.estado == "CANCELADO"
+    assert session.scalar(select(func.count()).select_from(Transaccion).where(Transaccion.id_pedido == order.id_pedido)) == 1
+
+
+def test_98_customer_cancellation_rejects_started_production(session):
+    customer = add_client(session)
+    order = create_order(session, customer)
+    order.estado = "EN_PRODUCCION"
+    session.flush()
+    with pytest.raises(Conflict, match="producción"):
+        OrderService().cancel(session, order_id=order.id_pedido, principal=customer, reason="Cancelación")
+
+
+def test_99_cancellation_releases_active_reservations_without_consuming_stock(session):
+    customer = add_client(session)
+    order = create_order(session, customer)
+    InventoryReservationService().reserve_for_order(session, order_id=order.id_pedido)
+    active = list(session.scalars(select(ReservaInventario).where(ReservaInventario.id_pedido == order.id_pedido)))
+    assert active
+    OrderService().cancel(session, order_id=order.id_pedido, principal=customer, reason="Cancelación sin pago")
+    assert all(item.estado == "LIBERADA" for item in active)

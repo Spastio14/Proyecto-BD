@@ -5,16 +5,20 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import NotFound, PermissionDenied
 from app.core.security import Principal
+from app.domain.orders import ALLOWED_TRANSITIONS
 from app.domain.money import money
 from app.models.entities import (
     Categoria,
     Cliente,
+    ComposicionProducto,
     Cotizacion,
     DetalleCotizacion,
     DetallePedido,
     Envio,
     Pedido,
     Producto,
+    HitoPago,
+    Transaccion,
     VarianteProducto,
 )
 from app.schemas.portal import (
@@ -30,6 +34,7 @@ from app.schemas.portal import (
     PortalSummary,
 )
 from app.services.orders import OrderService
+from app.services.inventory import InventoryService
 from app.services.payments import PaymentService
 from app.services.pricing import PricingService
 from app.services.quotations import QuotationService
@@ -131,6 +136,26 @@ class PortalService:
         delivery = session.scalar(select(Envio).where(Envio.id_pedido == order.id_pedido))
         balance = money(payment["saldo_pendiente"])
         requires_production = cls._requires_production(session, order.id_pedido)
+        has_payment_activity = session.scalar(
+            select(Transaccion.id_transaccion)
+            .where(Transaccion.id_pedido == order.id_pedido)
+            .limit(1)
+        ) is not None or session.scalar(
+            select(HitoPago.numero_hito).where(
+                HitoPago.id_pedido == order.id_pedido,
+                HitoPago.estado == "PAGADO",
+            ).limit(1)
+        ) is not None
+        if order.estado in {"EN_PRODUCCION", "LISTO", "ENTREGADO"}:
+            cancel_reason = "La producción ya comenzó; solicita revisión administrativa"
+        elif has_payment_activity:
+            cancel_reason = "Hay pagos reportados o verificados; solicita revisión administrativa"
+        elif order.estado == "CANCELADO":
+            cancel_reason = "El pedido ya está cancelado"
+        elif "CANCELADO" not in ALLOWED_TRANSITIONS.get(order.estado, frozenset()):
+            cancel_reason = "El estado actual no admite cancelación"
+        else:
+            cancel_reason = None
         return PortalOrder(
             codigo=order.codigo_pedido,
             fecha=order.fecha_creacion,
@@ -149,6 +174,8 @@ class PortalService:
             ),
             requiere_produccion=requires_production,
             productos=cls._order_lines(session, order.id_pedido),
+            puede_cancelar=cancel_reason is None,
+            motivo_bloqueo_cancelacion=cancel_reason,
         )
 
     @classmethod
@@ -324,8 +351,16 @@ class PortalService:
             )
             .order_by(Categoria.nombre, Producto.nombre, VarianteProducto.codigo_variante)
         ).all()
-        return [
-            PortalCatalogItem(
+        result = []
+        for variant, product, category in rows:
+            composition = list(session.scalars(select(ComposicionProducto).where(ComposicionProducto.id_variante == variant.id_variante)))
+            missing_recipe = variant.requiere_produccion and not composition
+            insufficient = variant.requiere_produccion and any(
+                InventoryService.availability(session, line.id_articulo) < line.cantidad_estandar
+                for line in composition
+            )
+            cause = "RECETA_INCOMPLETA" if missing_recipe else "SIN_EXISTENCIAS" if insufficient else None
+            result.append(PortalCatalogItem(
                 id_producto=product.id_producto,
                 id_variante=variant.id_variante,
                 codigo=variant.codigo_variante,
@@ -336,7 +371,8 @@ class PortalService:
                 ),
                 variante=variant.caracteristicas or variant.codigo_variante,
                 precio_referencia=variant.precio_detalle,
-                disponibilidad="BAJO_PEDIDO" if variant.requiere_produccion else "DISPONIBLE",
+                disponibilidad=("AGOTADO" if insufficient else "BAJO_PEDIDO" if variant.requiere_produccion else "DISPONIBLE"),
+                causa_disponibilidad=cause,
                 requiere_produccion=variant.requiere_produccion,
                 imagen_url=(
                     f"{public_storage_url.rstrip('/')}/storage/v1/object/public/catalogo-productos/"
@@ -344,9 +380,8 @@ class PortalService:
                     if public_storage_url and product.ruta_imagen_principal
                     else None
                 ),
-            )
-            for variant, product, category in rows
-        ]
+            ))
+        return result
 
     @classmethod
     def price_preview(

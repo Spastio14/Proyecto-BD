@@ -109,7 +109,7 @@ def test_21_cancellation_releases_active_reservations(session, customer, employe
     order = create_order(session, customer)
     payment = report_payment(session, order, customer)
     PaymentService().confirm(session, payment_id=payment.id_transaccion, principal=employee)
-    OrderService().cancel(session, order_id=order.id_pedido, principal=customer, reason="Prueba")
+    OrderService().cancel(session, order_id=order.id_pedido, principal=employee, reason="Prueba administrativa")
     reservation = session.scalar(
         select(ReservaInventario).where(ReservaInventario.id_pedido == order.id_pedido)
     )
@@ -122,7 +122,7 @@ def test_22_repeated_cancellation_does_not_change_physical_stock(session, custom
     payment = report_payment(session, order, customer)
     PaymentService().confirm(session, payment_id=payment.id_transaccion, principal=employee)
     stock = session.get(ArticuloInventariable, 1).existencia_actual
-    OrderService().cancel(session, order_id=order.id_pedido, principal=customer, reason="Prueba")
+    OrderService().cancel(session, order_id=order.id_pedido, principal=employee, reason="Prueba administrativa")
     with pytest.raises(Conflict, match="ya fue cancelado"):
         OrderService().cancel(session, order_id=order.id_pedido, principal=customer, reason="Otra")
     assert session.get(ArticuloInventariable, 1).existencia_actual == stock

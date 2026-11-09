@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import Principal, get_principal
 from app.db.session import get_session
-from app.schemas.api import DesignDecision, OrderCreate, PaymentReport, QuoteCreate, QuoteDecision
+from app.schemas.api import CancelRequest, DesignDecision, OrderCreate, PaymentReport, QuoteCreate, QuoteDecision
 from app.schemas.portal import (
     PortalCatalogItem,
     PortalOrder,
@@ -66,6 +66,20 @@ def order_detail(
     session: Session = Depends(get_session),
 ):
     return PortalService.order_detail(session, code=code, principal=principal)
+
+
+@router.post("/pedidos/{code}/cancelar", response_model=PortalOrder)
+def cancel_order(
+    code: str,
+    payload: CancelRequest,
+    principal: Principal = Depends(get_principal),
+    session: Session = Depends(get_session),
+):
+    order = PortalService._order_by_code(session, code=code, principal=principal)
+    cancelled = OrderService().cancel(
+        session, order_id=order.id_pedido, principal=principal, reason=payload.reason
+    )
+    return PortalService._serialize_order(session, order=cancelled, principal=principal)
 
 
 @router.get("/pedidos/{code}/disenos")
