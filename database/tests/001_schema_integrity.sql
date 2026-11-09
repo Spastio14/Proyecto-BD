@@ -14,18 +14,18 @@ end
 $$;
 
 select pg_temp.assert_true(
-    (select count(*) = 41
+    (select count(*) = 44
      from information_schema.tables
      where table_schema = 'public' and table_type = 'BASE TABLE'),
-    'deben existir exactamente 41 tablas públicas'
+    'deben existir exactamente 44 tablas públicas'
 );
 
 select pg_temp.assert_true(
-    (select count(*) = 41
+    (select count(*) = 44
      from pg_constraint c
      join pg_namespace n on n.oid = c.connamespace
      where n.nspname = 'public' and c.contype = 'p'),
-    'cada tabla debe conservar su PK (41 en total)'
+    'cada tabla debe conservar su PK (44 en total)'
 );
 
 select pg_temp.assert_true(
@@ -58,19 +58,19 @@ select pg_temp.assert_true(
 );
 
 select pg_temp.assert_true(
-    (select count(*) = 64
+    (select count(*) = 71
      from pg_constraint c
      join pg_namespace n on n.oid = c.connamespace
      where n.nspname = 'public' and c.contype = 'f'),
-    'deben existir las 64 FK conciliadas'
+    'deben existir las 71 FK conciliadas'
 );
 
 select pg_temp.assert_true(
-    (select count(*) = 41
+    (select count(*) = 44
      from pg_class c
      join pg_namespace n on n.oid = c.relnamespace
      where n.nspname = 'public' and c.relkind = 'r' and c.relrowsecurity),
-    'RLS debe estar habilitado en las 41 tablas'
+    'RLS debe estar habilitado en las 44 tablas'
 );
 
 select pg_temp.assert_true(
@@ -296,4 +296,4 @@ select pg_temp.assert_true(
 
 rollback;
 
-\echo 'OK: 41 tablas, 64 FK, nombres conciliados, integridad y RLS verificados.'
+\echo 'OK: 44 tablas, 71 FK, nombres conciliados, integridad y RLS verificados.'
