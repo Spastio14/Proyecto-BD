@@ -318,9 +318,15 @@ class OrderService:
                 raise Conflict(
                     "La producción ya comenzó; solicita una revisión administrativa para cancelar"
                 )
+            # Solo bloquear si existen transacciones PENDIENTES o VERIFICADAS.
+            # Las transacciones RECHAZADAS no representan dinero comprometido y
+            # no deben impedir la cancelación.
             if session.scalar(
                 select(Transaccion.id_transaccion)
-                .where(Transaccion.id_pedido == order_id)
+                .where(
+                    Transaccion.id_pedido == order_id,
+                    Transaccion.estado_verificacion.in_(("PENDIENTE", "VERIFICADO")),
+                )
                 .limit(1)
             ) is not None or session.scalar(
                 select(HitoPago.numero_hito).where(

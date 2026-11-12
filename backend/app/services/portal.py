@@ -136,9 +136,15 @@ class PortalService:
         delivery = session.scalar(select(Envio).where(Envio.id_pedido == order.id_pedido))
         balance = money(payment["saldo_pendiente"])
         requires_production = cls._requires_production(session, order.id_pedido)
+        # Solo considerar actividad de pago real: transacciones PENDIENTES o
+        # VERIFICADAS. Las transacciones RECHAZADAS no bloquean la cancelación
+        # porque no representan dinero en tránsito ni verificado.
         has_payment_activity = session.scalar(
             select(Transaccion.id_transaccion)
-            .where(Transaccion.id_pedido == order.id_pedido)
+            .where(
+                Transaccion.id_pedido == order.id_pedido,
+                Transaccion.estado_verificacion.in_(("PENDIENTE", "VERIFICADO")),
+            )
             .limit(1)
         ) is not None or session.scalar(
             select(HitoPago.numero_hito).where(

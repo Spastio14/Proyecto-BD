@@ -1,7 +1,3 @@
-\set ON_ERROR_STOP on
-
-begin;
-
 create function pg_temp.assert_true(condition boolean, message text)
 returns void
 language plpgsql

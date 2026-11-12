@@ -142,8 +142,12 @@ class PaymentService:
             session, order_id=order_id, states=("VERIFICADO",)
         )
         available = {
-            item.numero_hito: money(
-                max(item.monto_exigido - committed.get(item.numero_hito, ZERO), 0)
+            item.numero_hito: (
+                ZERO
+                if item.estado == "PAGADO"
+                else money(
+                    max(item.monto_exigido - committed.get(item.numero_hito, ZERO), 0)
+                )
             )
             for item in milestones
         }
@@ -527,8 +531,12 @@ class PaymentService:
         for milestone in milestones:
             verified = verified_by_hito.get(milestone.numero_hito, ZERO)
             pending = pending_by_hito.get(milestone.numero_hito, ZERO)
-            remaining = money(max(milestone.monto_exigido - verified, 0))
-            reportable = money(max(milestone.monto_exigido - verified - pending, 0))
+            if milestone.estado == "PAGADO":
+                remaining = ZERO
+                reportable = ZERO
+            else:
+                remaining = money(max(milestone.monto_exigido - verified, 0))
+                reportable = money(max(milestone.monto_exigido - verified - pending, 0))
             if milestone.tipo_hito == "ANTICIPO":
                 advance_verified = verified
                 advance_required = milestone.monto_exigido
@@ -541,7 +549,7 @@ class PaymentService:
                     "monto_verificado": verified,
                     "monto_restante": remaining,
                     "monto_disponible_reportar": reportable,
-                    "estado": "PAGADO" if remaining == 0 else "PENDIENTE",
+                    "estado": "PAGADO" if remaining == 0 or milestone.estado == "PAGADO" else "PENDIENTE",
                     "puede_reportar": (
                         reportable > 0 and order.estado not in CLOSED_ORDER_STATES
                     ),
@@ -549,6 +557,15 @@ class PaymentService:
             )
         total_verified = cls._verified_for_order(session, order_id=order_id)
         total_pending = cls._pending_for_order(session, order_id=order_id)
+        milestones_reportable = money(
+            sum((row["monto_disponible_reportar"] for row in rows), ZERO)
+        )
+        order_reportable = money(
+            max(order.total_pedido - total_verified - total_pending, 0)
+        )
+        effective_reportable = min(milestones_reportable, order_reportable)
+        if total_verified >= order.total_pedido or order.estado in CLOSED_ORDER_STATES:
+            effective_reportable = ZERO
         return {
             "id_pedido": order.id_pedido,
             "codigo_pedido": order.codigo_pedido,
@@ -569,9 +586,7 @@ class PaymentService:
             "total_verificado": total_verified,
             "total_pendiente_verificacion": total_pending,
             "saldo_pendiente": money(max(order.total_pedido - total_verified, 0)),
-            "disponible_reportar": money(
-                max(order.total_pedido - total_verified - total_pending, 0)
-            ),
+            "disponible_reportar": effective_reportable,
             "completamente_pagado": total_verified >= order.total_pedido,
             "hitos": rows,
         }
@@ -697,11 +712,23 @@ class PaymentService:
         result = []
         for order in orders:
             summary = PaymentService.summary(session, order_id=order.id_pedido, principal=principal)
+            # Usar la fuente de verdad verificada para determinar si queda importe
+            # cobrable. Se toman dos condiciones que deben cumplirse a la vez:
+            #   1. disponible_reportar > 0 (calculado sobre transacciones PENDIENTE +
+            #      VERIFICADO vs total del pedido).
+            #   2. completamente_pagado es False (total verificado < total pedido).
+            # Esto protege contra inconsistencias entre AplicacionTransaccionHito y
+            # Transaccion: si la suma verificada ya cubre el total, el pedido no
+            # debe ofrecerse para cobro aunque algún hito individual muestre saldo.
             available = summary["disponible_reportar"]
-            if available > ZERO:
-                result.append({"id_pedido": order.id_pedido, "codigo_pedido": order.codigo_pedido,
-                    "estado": order.estado, "total_pedido": order.total_pedido,
-                    "importe_disponible": available})
+            if available > ZERO and not summary["completamente_pagado"]:
+                result.append({
+                    "id_pedido": order.id_pedido,
+                    "codigo_pedido": order.codigo_pedido,
+                    "estado": order.estado,
+                    "total_pedido": order.total_pedido,
+                    "importe_disponible": available,
+                })
         return result
 
     @staticmethod
